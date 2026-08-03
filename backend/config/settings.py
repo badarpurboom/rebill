@@ -161,6 +161,6 @@ CHANNEL_LAYERS = {
 # ── WhatsApp (Meta Cloud API) ───────────────────────────────────────────
 # Live credentials live per-restaurant in the DB (Settings page).
 # MOCK mode routes every send to the on-screen simulator instead of Meta.
-WHATSAPP_MOCK_MODE = config('WHATSAPP_MOCK_MODE', default=True, cast=bool)
+WHATSAPP_MOCK_MODE = config('WHATSAPP_MOCK_MODE', default=False, cast=bool)
 WHATSAPP_API_VERSION = config('WHATSAPP_API_VERSION', default='v21.0')
 WHATSAPP_API_BASE = 'https://graph.facebook.com'
