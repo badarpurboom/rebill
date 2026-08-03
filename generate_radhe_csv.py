@@ -1,0 +1,163 @@
+import csv
+
+menu_data = [
+    # ── SALAD, PAPAD & RAITA ──
+    ["Salad, Papad & Raita", "Green Salad", "Veg", "", 100, ""],
+    ["Salad, Papad & Raita", "Cucumber Salad", "Veg", "", 110, ""],
+    ["Salad, Papad & Raita", "Onion Salad", "Veg", "", 100, ""],
+    ["Salad, Papad & Raita", "Fruit Salad", "Veg", "", 150, ""],
+    ["Salad, Papad & Raita", "Russian Salad", "Veg", "", 200, ""],
+    ["Salad, Papad & Raita", "Roasted Papad", "Veg", "", 15, ""],
+    ["Salad, Papad & Raita", "Fried Papad", "Veg", "", 25, ""],
+    ["Salad, Papad & Raita", "Masala Papad", "Veg", "", 50, ""],
+    ["Salad, Papad & Raita", "Plain Curd", "Veg", "", 50, ""],
+    ["Salad, Papad & Raita", "Mix Rayta", "Veg", "", 140, ""],
+    ["Salad, Papad & Raita", "Boondi Raita", "Veg", "", 110, ""],
+    ["Salad, Papad & Raita", "Cucumber Raita", "Veg", "", 99, ""],
+    ["Salad, Papad & Raita", "Pineapple Raita", "Veg", "", 160, ""],
+    ["Salad, Papad & Raita", "Fruit Raita", "Veg", "", 160, ""],
+
+    # ── MAHARANI KI DAL ──
+    ["Maharani Ki Dal", "Plain Yellow Dal", "Veg", "", 200, ""],
+    ["Maharani Ki Dal", "Jeera Dal", "Veg", "", 220, ""],
+    ["Maharani Ki Dal", "Chatpati Dal", "Veg", "", 220, ""],
+    ["Maharani Ki Dal", "Dal Tadka", "Veg", "", 240, ""],
+    ["Maharani Ki Dal", "Punjabi Dal Tadka", "Veg", "", 240, ""],
+    ["Maharani Ki Dal", "Dal Maharani (Desi Ghee Tadka)", "Veg", "", 280, ""],
+    ["Maharani Ki Dal", "Dal Makhani Radhe Radhe Special", "Veg", "", 290, ""],
+
+    # ── KHUSHBU E BASMATI ──
+    ["Khushbu E Basmati", "Steam Rice", "Veg", "", 110, ""],
+    ["Khushbu E Basmati", "Jeera Rice", "Veg", "", 135, ""],
+    ["Khushbu E Basmati", "Butter Rice", "Veg", "", 149, ""],
+    ["Khushbu E Basmati", "Desi Ghee Rice", "Veg", "", 149, ""],
+    ["Khushbu E Basmati", "Green Peas Pulao", "Veg", "", 129, ""],
+    ["Khushbu E Basmati", "Dal Khichari", "Veg", "", 199, ""],
+    ["Khushbu E Basmati", "Veg Pulao", "Veg", "", 199, ""],
+    ["Khushbu E Basmati", "Kashmiri Pulao", "Veg", "", 299, ""],
+    ["Khushbu E Basmati", "Navratan Pulao", "Veg", "", 329, ""],
+    ["Khushbu E Basmati", "Veg Hyderabadi Dum Rice With Raita", "Veg", "", 319, ""],
+    ["Khushbu E Basmati", "Paneer Hyderabadi Dum Rice with Raita", "Veg", "", 359, ""],
+    ["Khushbu E Basmati", "Veg Luckhnavi Dum Rice With Raita", "Veg", "", 319, ""],
+    ["Khushbu E Basmati", "Paneer Luckhnavi Dum Rice With Raita", "Veg", "", 349, ""],
+
+    # ── MAIN COURSE CHINESE ──
+    ["Main Course Chinese", "Veg Noodles", "Veg", 100, 130, ""],
+    ["Main Course Chinese", "Veg Schezwan Noodles", "Veg", 100, 150, ""],
+    ["Main Course Chinese", "Special Veg Singapore Noodles", "Veg", "", 200, ""],
+    ["Main Course Chinese", "Veg Hakka Noodles", "Veg", 125, 200, ""],
+    ["Main Course Chinese", "Veg Chilli Garlic Noodles", "Veg", "", 139, ""],
+    ["Main Course Chinese", "Mix Veg Noodles", "Veg", 105, 150, ""],
+    ["Main Course Chinese", "Paneer Noodles", "Veg", "", 180, ""],
+    ["Main Course Chinese", "Chilli Garlic Paneer Noodles", "Veg", "", 200, ""],
+    ["Main Course Chinese", "Paneer Hakka Noodles", "Veg", "", 159, ""],
+    ["Main Course Chinese", "Paneer Schezwan Noodles", "Veg", "", 199, ""],
+    ["Main Course Chinese", "Paneer Singapore Noodles", "Veg", "", 199, ""],
+    ["Main Course Chinese", "Veg Fried Rice", "Veg", "", 149, ""],
+    ["Main Course Chinese", "Singapore Fried Rice", "Veg", "", 159, ""],
+    ["Main Course Chinese", "Schezwan Fried Rice", "Veg", "", 149, ""],
+    ["Main Course Chinese", "Paneer Fried Rice", "Veg", "", 160, ""],
+
+    # ── CHINESE STARTER ──
+    ["Chinese Starter", "Veg Manchurian Dry 5Pcs / 10 Pcs", "Veg", 150, 220, ""],
+    ["Chinese Starter", "Veg Manchurian Gravy 4Pcs / 8 Pcs", "Veg", 160, 220, ""],
+    ["Chinese Starter", "Chilli Paneer Dry 5Pcs / 10 Pcs", "Veg", 160, 260, ""],
+    ["Chinese Starter", "Chilli Paneer Gravy 4Pcs / 8 Pcs", "Veg", 170, 270, ""],
+    ["Chinese Starter", "Crispy Chilli Baby Corn", "Veg", "", 239, ""],
+    ["Chinese Starter", "Crispy Chilli Mushroom", "Veg", "", 230, ""],
+    ["Chinese Starter", "Gobhi Chilli Dry / 8 Pcs", "Veg", "", 199, ""],
+    ["Chinese Starter", "Dragon Paneer / 8 Pcs", "Veg", "", 249, ""],
+    ["Chinese Starter", "Paneer Saslik / 8 Pcs", "Veg", "", 289, ""],
+    ["Chinese Starter", "Corn Salt & Pepper", "Veg", "", 250, ""],
+    ["Chinese Starter", "Special Honey Chilli Potato", "Veg", "", 200, ""],
+    ["Chinese Starter", "Chilli Potato Dry", "Veg", "", 150, ""],
+    ["Chinese Starter", "Paneer Manchurian Dry 5Pcs / 10 Pcs", "Veg", 185, 259, ""],
+    ["Chinese Starter", "Paneer Manchurian Gravy 4Pcs / 8 Pcs", "Veg", 195, 279, ""],
+    ["Chinese Starter", "Veg Spring Roll / 8 Pcs", "Veg", "", 150, ""],
+    ["Chinese Starter", "French Fry", "Veg", "", 100, ""],
+    ["Chinese Starter", "Peri Peri French Fry", "Veg", "", 109, ""],
+    ["Chinese Starter", "Chilli Soya Chaap / 8 Pcs", "Veg", "", 219, ""],
+    ["Chinese Starter", "Crispy Corn Chilli", "Veg", "", 199, ""],
+    ["Chinese Starter", "Crispy Veg Garlic", "Veg", "", 159, ""],
+    ["Chinese Starter", "Mushroom Kurkure", "Veg", "", 299, ""],
+
+    # ── TANDOORI STARTER ──
+    ["Tandoori Starter", "Paneer Tikka", "Veg", 199, 299, ""],
+    ["Tandoori Starter", "Achari Paneer Tikka", "Veg", 205, 310, ""],
+    ["Tandoori Starter", "Lajawab Paneer Tikka", "Veg", 209, 320, ""],
+    ["Tandoori Starter", "Lahsuni Paneer Tikka", "Veg", 205, 310, ""],
+    ["Tandoori Starter", "Lahori Paneer Tikka", "Veg", 205, 309, ""],
+    ["Tandoori Starter", "Malai Paneer Tikka", "Veg", 229, 350, ""],
+    ["Tandoori Starter", "Malai Soya Chaap", "Veg", 200, 310, ""],
+    ["Tandoori Starter", "Tandoori Soya Chaap", "Veg", 170, 260, ""],
+    ["Tandoori Starter", "Achari Soya Chaap", "Veg", 175, 290, ""],
+    ["Tandoori Starter", "Special Radhe Radhe Soya Chaap", "Veg", 199, 350, ""],
+    ["Tandoori Starter", "Tandoori Mushroom Tikka 5Pcs / 10 Pcs", "Veg", 230, 330, ""],
+    ["Tandoori Starter", "Lucknowi Seekh 8 Pcs", "Veg", "", 230, ""],
+    ["Tandoori Starter", "Hara Bhara Tikki", "Veg", 195, 325, ""],
+    ["Tandoori Starter", "Dahi Paneer Tikki", "Veg", 185, 260, ""],
+    ["Tandoori Starter", "Corn Tikki", "Veg", 189, 270, ""],
+
+    # ── BREAKFAST ──
+    ["Breakfast", "Poori Sabji - 4 Pc", "Veg", "", 80, ""],
+    ["Breakfast", "Chole + Plain Bhature", "Veg", "", 80, ""],
+    ["Breakfast", "Chole + Paneer Bhature", "Veg", "", 100, ""],
+    ["Breakfast", "Aloo Paratha with Curd -1 Pce", "Veg", "", 100, ""],
+    ["Breakfast", "Gobhi Paratha with Curd -1 Pcs", "Veg", "", 120, ""],
+    ["Breakfast", "Mix Veg Paratha with Curd - 1 Pcs", "Veg", "", 120, ""],
+    ["Breakfast", "Paneer Paratha with Curd - 1 Pcs", "Veg", "", 150, ""],
+
+    # ── SOUTH INDIAN ──
+    ["South Indian", "Plain Dosa", "Veg", "", 120, ""],
+    ["South Indian", "Masala Dosa", "Veg", "", 140, ""],
+    ["South Indian", "Butter Plain Dosa", "Veg", "", 150, ""],
+    ["South Indian", "Butter Masala Dosa", "Veg", "", 180, ""],
+    ["South Indian", "Paneer Plain Dosa", "Veg", "", 160, ""],
+    ["South Indian", "Paneer Masala Dosa", "Veg", "", 200, ""],
+    ["South Indian", "Paneer Butter Masala Dosa", "Veg", "", 230, ""],
+    ["South Indian", "Cheese Plain Dosa", "Veg", "", 180, ""],
+    ["South Indian", "Cheese Masala Dosa", "Veg", "", 240, ""],
+    ["South Indian", "Rava Dosa", "Veg", "", 180, ""],
+    ["South Indian", "Rava Masala Dosa", "Veg", "", 200, ""],
+    ["South Indian", "Rava Cheese Dosa", "Veg", "", 220, ""],
+    ["South Indian", "Rava Butter Paneer Dosa", "Veg", "", 240, ""],
+    ["South Indian", "Schezwan masala Dosa", "Veg", "", 240, ""],
+    ["South Indian", "Radhe Radhe Special dosa", "Veg", "", 250, ""],
+    ["South Indian", "Sambhar Vada -2 Pcs", "Veg", "", 100, ""],
+    ["South Indian", "Idli Sambhar -2 Pcs", "Veg", "", 100, ""],
+    ["South Indian", "Fry Idli - 2 Pcs", "Veg", "", 120, ""],
+    ["South Indian", "Masala Uttapam", "Veg", "", 150, ""],
+    ["South Indian", "Onion Uttapam", "Veg", "", 130, ""],
+    ["South Indian", "Mix Uttapam", "Veg", "", 180, ""],
+    ["South Indian", "South Indian Thali (mini dosa + Mini Uttapam + Idli)", "Veg", "", 300, ""],
+
+    # ── CHALO MOMOS KHATE HAI ──
+    ["Chalo Momos Khate Hai", "Steam Veg Momos", "Veg", 80, 110, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Fried Veg Momos", "Veg", 90, 130, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Kurkure Veg Momos", "Veg", 99, 140, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Tandoori Veg Momos", "Veg", 100, 160, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Chilli Dry Veg Momos", "Veg", 110, 170, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Tandoori Veg Malai Momos", "Veg", 130, 200, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Steam Paneer Momos", "Veg", 100, 160, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Fried Paneer Momos", "Veg", 110, 170, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Kurkure Paneer Momos", "Veg", 119, 190, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Tandoori Paneer Momos", "Veg", 120, 210, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Chilli Dry Paneer Momos", "Veg", 130, 230, "4 Pcs / 8 Pcs"],
+    ["Chalo Momos Khate Hai", "Tandoori Paneer Malai Momos", "Veg", 160, 240, "4 Pcs / 8 Pcs"],
+
+    # ── CHINESE SIZZLER COMBO ──
+    ["Chinese Sizzler Combo", "Fried Rice + Veg Manchurian", "Veg", "", 215, ""],
+    ["Chinese Sizzler Combo", "Fried Rice + Paneer Manchurian", "Veg", "", 230, ""],
+    ["Chinese Sizzler Combo", "Garlic Noodles + Veg Manchurian", "Veg", "", 200, ""],
+    ["Chinese Sizzler Combo", "Schezwan Fried Rice + Paneer Chili Gravy", "Veg", "", 230, ""],
+    ["Chinese Sizzler Combo", "Noodles with chilli Paneer", "Veg", "", 230, ""],
+]
+
+columns = ["category", "name", "food_type", "half_price", "full_price", "description"]
+
+with open("radhe_sweets_menu.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow(columns)
+    writer.writerows(menu_data)
+
+print(f"Successfully generated radhe_sweets_menu.csv with {len(menu_data)} menu items!")

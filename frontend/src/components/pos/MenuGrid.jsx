@@ -27,6 +27,13 @@ export default function MenuGrid({ items, categories, busyVariant, onAdd, disabl
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  const activeCategories = useMemo(() => {
+    const categoryIdsWithItems = new Set(
+      items.filter((i) => i.is_available).map((i) => String(i.category))
+    )
+    return categories.filter((c) => categoryIdsWithItems.has(String(c.id)))
+  }, [items, categories])
+
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
     return items.filter(
@@ -87,7 +94,7 @@ export default function MenuGrid({ items, categories, busyVariant, onAdd, disabl
         <CategoryChip active={categoryId === ''} onClick={() => setCategoryId('')}>
           All Dishes ({items.filter((i) => i.is_available).length})
         </CategoryChip>
-        {categories.map((c) => (
+        {activeCategories.map((c) => (
           <CategoryChip
             key={c.id}
             active={categoryId === String(c.id)}
@@ -109,7 +116,7 @@ export default function MenuGrid({ items, categories, busyVariant, onAdd, disabl
             <p className="text-xs text-slate-400 mt-1">Try adjusting your search query or category filters</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
             {visible.map((item) => {
               const half = item.variants.find((v) => v.portion === 'HALF')
               const full = item.variants.find((v) => v.portion === 'FULL')

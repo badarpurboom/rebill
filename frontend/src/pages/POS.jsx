@@ -381,9 +381,9 @@ export default function POS() {
       </header>
 
       {/* POS Billing Canvas */}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
         {/* Left: Menu Browser */}
-        <section className="min-h-0 flex-1 p-4 lg:p-6">
+        <section className="min-h-0 min-w-0 flex-1 p-3 sm:p-4 lg:p-5 overflow-y-auto">
           <MenuGrid
             items={menu.items}
             categories={menu.categories}
@@ -394,7 +394,7 @@ export default function POS() {
         </section>
 
         {/* Right: Glassmorphism Order Cart */}
-        <aside className="flex min-h-0 w-full flex-col border-t border-slate-200/80 bg-white p-4 sm:p-5 lg:w-96 lg:border-t-0 lg:border-l shadow-xs">
+        <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-slate-200/80 bg-white p-4 sm:p-5 lg:w-80 xl:w-96 lg:border-t-0 lg:border-l shadow-xs">
           <CartPanel
             order={order}
             totals={totals}
@@ -414,6 +414,7 @@ export default function POS() {
           />
         </aside>
       </div>
+
 
       {kotSlip && (
         <PrintSlipModal
