@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { categories as categoryApi, items as itemApi } from '@/services/menu'
 import { tables as tableApi } from '@/services/tables'
-import { bills as billApi } from '@/services/billing'
+import { reportsService } from '@/services/reports'
 import { ROLE_LABEL } from '@/utils/roles'
 import { money } from '@/utils/format'
 import { PageLoader } from '@/components/ui/Misc'
@@ -13,25 +13,18 @@ import {
   IconSparkles,
   IconReceipt,
   IconChefHat,
-  IconWhatsApp,
 } from '@/components/ui/Icons'
-
-const HOURLY_POINTS = [
-  { hour: '12 PM', revenue: 2400, label: '₹2.4k' },
-  { hour: '1 PM', revenue: 5200, label: '₹5.2k', peak: 'LUNCH' },
-  { hour: '2 PM', revenue: 4100, label: '₹4.1k' },
-  { hour: '3 PM', revenue: 1900, label: '₹1.9k' },
-  { hour: '7 PM', revenue: 3400, label: '₹3.4k' },
-  { hour: '8 PM', revenue: 6800, label: '₹6.8k', peak: 'DINNER' },
-  { hour: '9 PM', revenue: 7500, label: '₹7.5k', peak: 'DINNER' },
-  { hour: '10 PM', revenue: 3100, label: '₹3.1k' },
-]
 
 export default function Dashboard() {
   const { user, role } = useAuth()
   const [stats, setStats] = useState(null)
-  const [tableStats, setTableStats] = useState({ available: 0, occupied: 0, total: 0, billed: 0 })
-  const [salesSummary, setSalesSummary] = useState({ todaySales: 0, totalBills: 0, avgBill: 0 })
+  const [tableStats, setTableStats] = useState({ available: 0, occupied: 0, total: 0, billed: 0, occupancyPercent: 0 })
+  const [salesSummary, setSalesSummary] = useState({ todaySales: 0, totalBills: 0, avgBill: 0, trend: 'Live' })
+  const [kitchenSpeed, setKitchenSpeed] = useState('12 mins')
+  const [hourlyCurve, setHourlyCurve] = useState([])
+  const [paymentBreakdown, setPaymentBreakdown] = useState({ upi_pct: 0, upi_amount: '0', card_pct: 0, card_amount: '0', cash_pct: 0, cash_amount: '0' })
+  const [dineinPercent, setDineinPercent] = useState(0)
+  const [topDishes, setTopDishes] = useState([])
   const [timeFilter, setTimeFilter] = useState('today')
   const [hoveredPoint, setHoveredPoint] = useState(null)
 
@@ -40,43 +33,50 @@ export default function Dashboard() {
       categoryApi.list().catch(() => []),
       itemApi.list().catch(() => []),
       tableApi.list().catch(() => []),
-      billApi.list({ period: timeFilter }).catch(() => ({ results: [], count: 0 })),
+      reportsService.getDashboardSummary(timeFilter).catch(() => null),
     ])
-      .then(([cats, items, tbls, billsData]) => {
+      .then(([cats, items, tbls, summary]) => {
         setStats({
           categories: cats.length,
           items: items.length,
           outOfStock: items.filter((i) => !i.is_available).length,
           veg: items.filter((i) => i.food_type === 'VEG').length,
-          itemsList: items.slice(0, 5),
           outOfStockList: items.filter((i) => !i.is_available).slice(0, 3),
         })
-        const occupied = tbls.filter((t) => t.is_occupied || t.status === 'OCCUPIED').length
-        const billed = tbls.filter((t) => t.status === 'BILLED').length
-        setTableStats({
-          total: tbls.length,
-          occupied,
-          billed,
-          available: tbls.length - occupied - billed,
-        })
 
-        const paidBills = (billsData.results || []).filter((b) => b.status === 'PAID')
-        const totalRev = paidBills.reduce((sum, b) => sum + Number(b.net_payable), 0)
-        const avg = paidBills.length > 0 ? totalRev / paidBills.length : 0
-        setSalesSummary({
-          todaySales: totalRev,
-          totalBills: paidBills.length,
-          avgBill: avg,
-        })
+        if (summary) {
+          setSalesSummary({
+            todaySales: Number(summary.today_sales || 0),
+            totalBills: summary.total_bills || 0,
+            avgBill: Number(summary.avg_ticket || 0),
+            trend: summary.sales_trend || 'Live',
+          })
+          setTableStats({
+            total: summary.table_stats.total || tbls.length,
+            occupied: summary.table_stats.occupied || 0,
+            billed: summary.table_stats.billed || 0,
+            available: summary.table_stats.available || 0,
+            occupancyPercent: summary.table_stats.occupancy_percent || 0,
+          })
+          setKitchenSpeed(summary.kitchen_speed || '12 mins')
+          setHourlyCurve(summary.hourly_curve || [])
+          setPaymentBreakdown(summary.payment_breakdown || { upi_pct: 0, upi_amount: '0', card_pct: 0, card_amount: '0', cash_pct: 0, cash_amount: '0' })
+          setDineinPercent(summary.dinein_percent || 0)
+          setTopDishes(summary.top_dishes || [])
+        } else {
+          const occupied = tbls.filter((t) => t.is_occupied || t.status === 'OCCUPIED').length
+          const billed = tbls.filter((t) => t.status === 'BILLED').length
+          const available = Math.max(0, tbls.length - occupied - billed)
+          const occupancyPercent = tbls.length > 0 ? Math.round(((occupied + billed) / tbls.length) * 100) : 0
+          setTableStats({ total: tbls.length, occupied, billed, available, occupancyPercent })
+        }
       })
       .catch(() => {
-        setStats({ categories: 0, items: 0, outOfStock: 0, veg: 0, itemsList: [], outOfStockList: [] })
+        setStats({ categories: 0, items: 0, outOfStock: 0, veg: 0, outOfStockList: [] })
       })
   }, [timeFilter])
 
   if (!stats) return <PageLoader label="Loading Executive Dashboard…" />
-
-  const occupancyPercent = tableStats.total > 0 ? Math.round(((tableStats.occupied + tableStats.billed) / tableStats.total) * 100) : 0
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -148,15 +148,15 @@ export default function Dashboard() {
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           icon={<IconReceipt className="size-5 text-rose-600" />}
-          label="Today Sales"
+          label={timeFilter === 'today' ? 'Today Sales' : timeFilter === 'week' ? 'This Week Sales' : 'This Month Sales'}
           value={money(salesSummary.todaySales)}
           sub={`${salesSummary.totalBills} Paid Orders`}
-          trend="+14% vs yesterday"
+          trend={salesSummary.trend}
         />
         <KpiCard
           icon={<IconTables className="size-5 text-emerald-600" />}
           label="Table Occupancy"
-          value={`${occupancyPercent}%`}
+          value={`${tableStats.occupancyPercent}%`}
           sub={`${tableStats.occupied + tableStats.billed}/${tableStats.total} Tables Occupied`}
           trend={`${tableStats.available} Free Tables`}
         />
@@ -165,14 +165,14 @@ export default function Dashboard() {
           label="Avg Ticket Size"
           value={money(salesSummary.avgBill)}
           sub="Per Customer Bill"
-          trend="Optimal Ticket"
+          trend="Real Average"
         />
         <KpiCard
           icon={<IconChefHat className="size-5 text-slate-700" />}
           label="Kitchen Speed"
-          value="14 mins"
+          value={kitchenSpeed}
           sub="Average KOT Prep"
-          trend="Fast Kitchen Turnaround"
+          trend="Order Turnaround"
         />
       </div>
 
@@ -183,16 +183,16 @@ export default function Dashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-black text-slate-900">Peak Hours Revenue Curve</h2>
-              <p className="text-[11px] text-slate-400 font-semibold">Continuous sales intensity graph (12 PM - 10 PM)</p>
+              <p className="text-[11px] text-slate-400 font-semibold">Continuous sales intensity graph (10 AM - 10 PM)</p>
             </div>
             <div className="flex items-center gap-3 text-xs font-extrabold">
               <span className="flex items-center gap-1.5 text-rose-600">
                 <span className="size-2.5 rounded-full bg-rose-600" />
-                Dinner Peak (9 PM ₹7.5k)
+                Dinner Peak (7-9 PM)
               </span>
               <span className="flex items-center gap-1.5 text-amber-600">
                 <span className="size-2.5 rounded-full bg-amber-500" />
-                Lunch Peak (1 PM ₹5.2k)
+                Lunch Peak (12-2 PM)
               </span>
             </div>
           </div>
@@ -200,7 +200,7 @@ export default function Dashboard() {
           {/* SVG Area Chart Container */}
           <div className="relative pt-2">
             <SvgAreaChart
-              data={HOURLY_POINTS}
+              data={hourlyCurve}
               hoveredPoint={hoveredPoint}
               onHover={setHoveredPoint}
             />
@@ -215,14 +215,14 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-3">
-            <PaymentShareRow label="UPI / QR Code" percent={52} color="bg-emerald-500" amount="52%" />
-            <PaymentShareRow label="Credit / Debit Card" percent={33} color="bg-rose-500" amount="33%" />
-            <PaymentShareRow label="Cash Payment" percent={15} color="bg-amber-500" amount="15%" />
+            <PaymentShareRow label="UPI / QR Code" percent={paymentBreakdown.upi_pct} color="bg-emerald-500" amount={`${paymentBreakdown.upi_pct}% (₹${paymentBreakdown.upi_amount})`} />
+            <PaymentShareRow label="Credit / Debit Card" percent={paymentBreakdown.card_pct} color="bg-rose-500" amount={`${paymentBreakdown.card_pct}% (₹${paymentBreakdown.card_amount})`} />
+            <PaymentShareRow label="Cash Payment" percent={paymentBreakdown.cash_pct} color="bg-amber-500" amount={`${paymentBreakdown.cash_pct}% (₹${paymentBreakdown.cash_amount})`} />
           </div>
 
           <div className="rounded-2xl bg-slate-50 border border-slate-200/60 p-3 flex items-center justify-between text-xs font-bold text-slate-700">
             <span>Dine-In vs Takeaway</span>
-            <span className="text-rose-600 font-black">82% Dine-In</span>
+            <span className="text-rose-600 font-black">{dineinPercent}% Dine-In</span>
           </div>
         </div>
       </div>
@@ -243,9 +243,9 @@ export default function Dashboard() {
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          {stats.itemsList.map((item, idx) => (
+          {topDishes.map((item, idx) => (
             <div
-              key={item.id}
+              key={item.name + idx}
               className="flex flex-col justify-between rounded-2xl border border-slate-200/70 bg-slate-50/50 p-3 transition-all hover:bg-white hover:border-rose-300 hover:shadow-xs"
             >
               <div>
@@ -254,16 +254,16 @@ export default function Dashboard() {
                     #{idx + 1}
                   </span>
                   <span className="text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                    Hot Seller
+                    {item.total_qty > 0 ? `${item.total_qty} Sold` : 'Available'}
                   </span>
                 </div>
                 <p className="text-xs font-extrabold text-slate-900 truncate">{item.name}</p>
-                <p className="text-[10px] font-semibold text-slate-400">{item.category_name || 'Main'}</p>
+                <p className="text-[10px] font-semibold text-slate-400">{item.portion ? `Portion: ${item.portion}` : item.category_name || 'Main'}</p>
               </div>
 
               <div className="mt-2 pt-1 border-t border-slate-200/60 flex items-center justify-between text-xs font-black text-slate-900">
-                <span>Price</span>
-                <span className="tabular">{money(item.variants?.[0]?.price ?? 199)}</span>
+                <span>Revenue</span>
+                <span className="tabular">{item.total_revenue && item.total_revenue !== '0.00' ? money(item.total_revenue) : money(item.price || 0)}</span>
               </div>
             </div>
           ))}
@@ -279,7 +279,17 @@ function SvgAreaChart({ data, hoveredPoint, onHover }) {
   const paddingX = 40
   const paddingY = 25
 
-  const maxVal = 8000
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex h-36 items-center justify-center text-xs font-semibold text-slate-400">
+        No hourly sales data recorded yet.
+      </div>
+    )
+  }
+
+  const maxRevenue = Math.max(...data.map((d) => d.revenue), 1000)
+  const maxVal = Math.ceil(maxRevenue / 1000) * 1000 || 5000
+
   const points = data.map((d, idx) => {
     const x = paddingX + (idx / (data.length - 1)) * (width - 2 * paddingX)
     const y = height - paddingY - (d.revenue / maxVal) * (height - 2 * paddingY)
@@ -313,10 +323,11 @@ function SvgAreaChart({ data, hoveredPoint, onHover }) {
         </defs>
 
         {/* Dotted Gridlines */}
-        {[2000, 4000, 6000, 8000].map((val) => {
+        {[0.25, 0.5, 0.75, 1].map((factor) => {
+          const val = maxVal * factor
           const y = height - paddingY - (val / maxVal) * (height - 2 * paddingY)
           return (
-            <g key={val}>
+            <g key={factor}>
               <line
                 x1={paddingX}
                 y1={y}
@@ -327,7 +338,7 @@ function SvgAreaChart({ data, hoveredPoint, onHover }) {
                 strokeWidth="1"
               />
               <text x={paddingX - 8} y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8" fontWeight="600">
-                ₹{val / 1000}k
+                ₹{val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val}
               </text>
             </g>
           )
@@ -342,7 +353,7 @@ function SvgAreaChart({ data, hoveredPoint, onHover }) {
         {/* Interactive Point Markers */}
         {points.map((pt, idx) => {
           const isHovered = hoveredPoint === idx
-          const isPeak = pt.peak === 'DINNER'
+          const isPeak = pt.peak === 'DINNER' || pt.peak === 'LUNCH'
           return (
             <g
               key={pt.hour}
@@ -351,7 +362,7 @@ function SvgAreaChart({ data, hoveredPoint, onHover }) {
               onMouseLeave={() => onHover(null)}
             >
               {/* Outer Pulse Circle for Peaks */}
-              {isPeak && (
+              {isPeak && pt.revenue > 0 && (
                 <circle cx={pt.x} cy={pt.y} r="8" fill="#e11d48" opacity="0.2" className="animate-ping" />
               )}
 
@@ -395,9 +406,9 @@ function SvgAreaChart({ data, hoveredPoint, onHover }) {
       </svg>
 
       {/* Hover Active Card */}
-      {hoveredPoint !== null && (
+      {hoveredPoint !== null && points[hoveredPoint] && (
         <div className="absolute top-2 right-4 rounded-xl bg-slate-900 text-white px-3 py-1.5 text-xs font-bold shadow-md animate-fade-in">
-          <span>{points[hoveredPoint].hour} Peak: </span>
+          <span>{points[hoveredPoint].hour}: </span>
           <span className="text-amber-400 font-black tabular">{points[hoveredPoint].label} Sales</span>
         </div>
       )}

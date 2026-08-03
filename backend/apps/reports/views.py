@@ -4,16 +4,31 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from rest_framework.permissions import IsAuthenticated
+
 from apps.auth_app.permissions import IsOwner
 
 from .services import (
     generate_report_pdf,
     get_daily_report,
+    get_dashboard_summary,
     get_gst_report,
     get_ltv_report,
     get_monthly_report,
     get_weekly_report,
 )
+
+
+class DashboardSummaryView(APIView):
+    """Executive Dashboard Real-Time Metrics."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        period = request.query_params.get('period', 'today')
+        res = get_dashboard_summary(period)
+        return Response(res, status=status.HTTP_200_OK)
+
 
 
 class DailyReportView(APIView):

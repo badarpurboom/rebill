@@ -1,7 +1,12 @@
 import api from './api'
 
 export const reportsService = {
+  getDashboardSummary(period = 'today') {
+    return api.get('/reports/dashboard-summary/', { params: { period } }).then((res) => res.data)
+  },
+
   getDailyReport(date = null) {
+
     return api.get('/reports/daily/', { params: date ? { date } : {} }).then((res) => res.data)
   },
 
