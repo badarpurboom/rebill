@@ -61,6 +61,14 @@ class MenuItemViewSet(viewsets.ModelViewSet):
         item.save(update_fields=['is_available', 'updated_at'])
         return Response({'id': item.id, 'is_available': item.is_available})
 
+    @action(detail=False, methods=['post'], permission_classes=[IsOwner])
+    def clear_all(self, request):
+        """Delete all menu items and categories to start fresh."""
+        count, _ = MenuItem.objects.all().delete()
+        Category.objects.all().delete()
+        return Response({'deleted_count': count, 'detail': 'All menu items and categories cleared.'})
+
+
     @action(
         detail=False,
         methods=['post'],

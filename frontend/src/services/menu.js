@@ -13,6 +13,8 @@ export const items = {
   update: (id, payload) => api.put(`/menu/items/${id}/`, payload).then((r) => r.data),
   remove: (id) => api.delete(`/menu/items/${id}/`),
   toggleStock: (id) => api.post(`/menu/items/${id}/toggle_stock/`).then((r) => r.data),
+  clearAll: () => api.post('/menu/items/clear_all/').then((r) => r.data),
+
 
   importFile: (file) => {
     const form = new FormData()
