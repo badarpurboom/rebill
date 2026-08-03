@@ -46,9 +46,10 @@ python3 manage.py migrate --noinput
 # 4. Frontend Setup
 echo "[4/6] Setting up Vite Frontend..."
 cd "$APP_DIR/frontend"
-echo "Upgrading/Installing Node.js 22..."
+echo "Ensuring Node.js 22 is installed..."
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get install -y nodejs
+
 
 
 npm install
