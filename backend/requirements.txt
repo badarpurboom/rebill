@@ -1,0 +1,13 @@
+django>=6.0
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+channels
+daphne
+reportlab
+pandas
+openpyxl
+python-decouple
+django-crontab
+requests
+Pillow
