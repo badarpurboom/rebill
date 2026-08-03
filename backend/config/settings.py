@@ -71,13 +71,29 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# Dev: SQLite. Prod: PostgreSQL (swap ENGINE + creds via .env).
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+from decouple import config
+
+DB_ENGINE = config('DB_ENGINE', default='django.db.backends.sqlite3')
+
+if DB_ENGINE == 'django.db.backends.postgresql':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DB_NAME', default='rebill_db'),
+            'USER': config('DB_USER', default='rebill_user'),
+            'PASSWORD': config('DB_PASSWORD', default='RebillSecurePass2026!'),
+            'HOST': config('DB_HOST', default='127.0.0.1'),
+            'PORT': config('DB_PORT', default='5432'),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
 
 AUTH_USER_MODEL = 'auth_app.User'
 

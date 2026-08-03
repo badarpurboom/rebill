@@ -11,3 +11,4 @@ python-decouple
 django-crontab
 requests
 Pillow
+psycopg2-binary
