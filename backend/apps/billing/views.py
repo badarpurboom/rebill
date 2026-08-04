@@ -114,7 +114,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             with transaction.atomic():
                 order = Order.objects.create(table=table, created_by=request.user)
-                table.mark(TableStatus.OCCUPIED)
+                # Note: Table remains AVAILABLE until the first KOT is sent.
         except IntegrityError:
             # Lost the race against another cashier — hand back their order.
             order = table.orders.filter(status__in=OPEN_STATUSES).first()
@@ -217,6 +217,11 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             created_by=request.user,
         )
         OrderItem.objects.filter(pk__in=[line.pk for line in pending]).update(kot=ticket)
+        
+        # Mark table as occupied only when the first KOT is generated
+        if order.table and order.table.status == TableStatus.AVAILABLE:
+            order.table.mark(TableStatus.OCCUPIED)
+
         return Response(
             KOTSerializer(KOT.objects.prefetch_related('items').get(pk=ticket.pk)).data,
             status=status.HTTP_201_CREATED,
