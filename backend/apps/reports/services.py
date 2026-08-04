@@ -7,7 +7,8 @@ from django.utils import timezone
 
 from apps.billing.models import Bill, BillStatus, OrderItem, PaymentMode
 from apps.customers.models import Customer
-from apps.tables.models import RestaurantTable
+from apps.tables.models import RestaurantTable, TableStatus
+from apps.settings_app.models import RestaurantSettings
 
 
 def money(val):
@@ -47,9 +48,9 @@ def get_dashboard_summary(period='today'):
     avg_ticket = money(total_sales / total_bills) if total_bills > 0 else Decimal('0.00')
 
     # Table Occupancy
-    tbls = RestaurantTable.objects.all()
-    occupied = tbls.filter(Q(is_occupied=True) | Q(status='OCCUPIED')).count()
-    billed = tbls.filter(status='BILLED').count()
+    tbls = RestaurantTable.objects.filter(is_active=True)
+    occupied = tbls.filter(status=TableStatus.OCCUPIED).count()
+    billed = tbls.filter(status=TableStatus.BILLED).count()
     total_tbls = tbls.count()
     available = max(0, total_tbls - occupied - billed)
     occupancy_pct = round(((occupied + billed) / total_tbls) * 100) if total_tbls > 0 else 0
@@ -206,11 +207,6 @@ def get_daily_report(target_date):
         OrderItem.objects.filter(order_id__in=order_ids)
         .values('item_name', 'portion')
         .annotate(total_qty=Sum('quantity'), total_revenue=Sum(F('unit_price') * F('quantity')))
-        .order_order_by('-total_qty')[:5]
-        if hasattr(OrderItem.objects, 'order_order_by')
-        else OrderItem.objects.filter(order_id__in=order_ids)
-        .values('item_name', 'portion')
-        .annotate(total_qty=Sum('quantity'), total_revenue=Sum(F('unit_price') * F('quantity')))
         .order_by('-total_qty')[:5]
     )
 
@@ -362,7 +358,8 @@ def get_gst_report(from_date, to_date):
             'total_invoice': str(b.total),
         })
 
-    settings_row = RestaurantSettings.load()
+    from apps.settings_app.models import RestaurantSettings as _RS
+    settings_row = _RS.load()
 
     return {
         'from_date': from_date.strftime('%Y-%m-%d'),
@@ -429,7 +426,8 @@ def generate_report_pdf(report_type, params):
         spaceAfter=14,
     )
 
-    settings_row = RestaurantSettings.load()
+    from apps.settings_app.models import RestaurantSettings as _RS
+    settings_row = _RS.load()
 
     if report_type == 'daily':
         data = get_daily_report(params.get('date', timezone.now().strftime('%Y-%m-%d')))
