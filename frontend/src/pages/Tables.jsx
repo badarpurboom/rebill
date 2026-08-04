@@ -9,7 +9,6 @@ import Button from '@/components/ui/Button'
 import { EmptyState, PageLoader } from '@/components/ui/Misc'
 import FloorMap, { FloorLegend } from '@/components/tables/FloorMap'
 import TableFormModal from '@/components/tables/TableFormModal'
-import TableConfirmModal from '@/components/tables/TableConfirmModal'
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function todayLabel() {
@@ -36,7 +35,6 @@ export default function Tables() {
   const [saving, setSaving] = useState(false)
   const [formTable, setFormTable] = useState(null)
   const [liveMode, setLiveMode] = useState(false)
-  const [pendingTable, setPendingTable] = useState(null)   // Table awaiting confirmation
 
   /* Load */
   const load = useCallback(async () => {
@@ -105,15 +103,7 @@ export default function Tables() {
   /* Open table in POS */
   const openTable = (table) => {
     if (!table.is_active) { toast.info(`Table ${table.number} is inactive.`); return }
-
-    // OCCUPIED / BILLED — order already running, navigate directly (no risk of accidental occupation)
-    if (table.status === 'OCCUPIED' || table.status === 'BILLED') {
-      navigate(`/pos?table=${table.id}`)
-      return
-    }
-
-    // AVAILABLE — show confirmation modal before marking table as occupied
-    setPendingTable(table)
+    navigate(`/pos?table=${table.id}`)
   }
 
   if (loading) return <PageLoader label="Loading floor map…" />
@@ -271,18 +261,6 @@ export default function Tables() {
             setFormTable(null)
             toast.success(`Table ${deleted.number} removed.`)
           }}
-        />
-      )}
-
-      {/* ── Table Open Confirmation Modal (AVAILABLE tables only) ── */}
-      {pendingTable && (
-        <TableConfirmModal
-          table={pendingTable}
-          onConfirm={(table) => {
-            setPendingTable(null)
-            navigate(`/pos?table=${table.id}`)
-          }}
-          onCancel={() => setPendingTable(null)}
         />
       )}
     </div>
