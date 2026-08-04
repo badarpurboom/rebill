@@ -38,7 +38,10 @@ def compute_totals(subtotal, discount_percent, settings, redeem_points=0):
 
     cgst_amount = money(taxable_amount * settings.cgst_percent / Decimal('100'))
     sgst_amount = money(taxable_amount * settings.sgst_percent / Decimal('100'))
-    total = money(taxable_amount + cgst_amount + sgst_amount)
+    
+    total_exact = taxable_amount + cgst_amount + sgst_amount
+    total_rounded = total_exact.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    total = money(total_rounded)
 
     redeem_points = max(0, int(redeem_points or 0))
     redeem_amount = money(settings.redeem_value_of(redeem_points)) if redeem_points else ZERO
