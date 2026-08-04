@@ -129,6 +129,7 @@ class OrderSerializer(serializers.ModelSerializer):
     subtotal = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     item_count = serializers.IntegerField(read_only=True)
     has_unsent_items = serializers.BooleanField(read_only=True)
+    has_kots = serializers.BooleanField(read_only=True)
     bill = BillSerializer(read_only=True)
     totals = serializers.SerializerMethodField()
     customer_detail = serializers.SerializerMethodField()
@@ -139,7 +140,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'id', 'order_type', 'order_type_display', 'table', 'table_number', 'status', 'status_display',
             'customer', 'customer_detail',
             'created_by_name', 'created_at', 'updated_at',
-            'items', 'item_count', 'subtotal', 'has_unsent_items', 'totals', 'bill',
+            'items', 'item_count', 'subtotal', 'has_unsent_items', 'has_kots', 'totals', 'bill',
         ]
 
     def get_customer_detail(self, obj):

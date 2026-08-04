@@ -73,6 +73,11 @@ class Order(models.Model):
         """True when something has been added since the last KOT went out."""
         return self.items.filter(kot__isnull=True).exists()
 
+    @property
+    def has_kots(self):
+        """True if any KOT has been generated for this order."""
+        return self.kots.exists()
+
 
 class KOT(models.Model):
     """Kitchen Order Ticket — one batch of newly added items.

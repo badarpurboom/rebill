@@ -62,7 +62,7 @@ export default function POS() {
       .then(([items, categories, config, openOrders]) => {
         setMenu({ items, categories })
         setSettings(config)
-        setActiveTakeawaysList(openOrders.filter((o) => o.order_type === 'TAKEAWAY'))
+        setActiveTakeawaysList(openOrders.filter((o) => o.order_type === 'TAKEAWAY' && o.has_kots))
       })
       .catch((error) => toast.error(errorMessage(error, 'Failed to load menu.')))
   }, [toast])
@@ -131,7 +131,7 @@ export default function POS() {
     if (!orderId) return
     setOrder(await orderApi.get(orderId))
     orderApi.listOpen().then((openOrders) => {
-      setActiveTakeawaysList(openOrders.filter((o) => o.order_type === 'TAKEAWAY'))
+      setActiveTakeawaysList(openOrders.filter((o) => o.order_type === 'TAKEAWAY' && o.has_kots))
     }).catch(() => {})
   }, [orderId])
 
@@ -535,7 +535,7 @@ function POSStartScreen({ onPickTable, onPickOrder, onTakeaway }) {
 
   if (rows === null) return <PageLoader label="Loading Lumière POS Launcher…" />
 
-  const activeTakeaways = openOrders.filter((o) => o.order_type === 'TAKEAWAY')
+  const activeTakeaways = openOrders.filter((o) => o.order_type === 'TAKEAWAY' && o.has_kots)
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
