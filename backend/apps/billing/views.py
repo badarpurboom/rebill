@@ -632,6 +632,8 @@ class KOTListView(ListAPIView):
 
     def get_queryset(self):
         qs = KOT.objects.select_related('order__table', 'created_by').prefetch_related('items')
+        # Only show active tickets: must have items and order must be running.
+        qs = qs.filter(items__isnull=False, order__status=OrderStatus.RUNNING).distinct()
         if self.request.query_params.get('today') != 'false':
             qs = qs.filter(created_at__date=timezone.localdate())
         return qs[:100]
