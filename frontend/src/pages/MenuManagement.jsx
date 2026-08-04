@@ -351,7 +351,7 @@ export default function MenuManagement() {
                           {/* Actions */}
                           {isOwner && (
                             <td className="px-5 py-3.5 text-right">
-                              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex items-center justify-end gap-1">
                                 <button
                                   onClick={() => setEditing(item)}
                                   title="Edit"
