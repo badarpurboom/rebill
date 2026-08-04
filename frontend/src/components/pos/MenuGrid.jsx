@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Fuse from 'fuse.js'
 import { priceShort } from '@/utils/format'
 import { FoodTypeDot } from '@/components/ui/Misc'
 import { Input } from '@/components/ui/Field'
@@ -34,16 +35,31 @@ export default function MenuGrid({ items, categories, busyVariant, onAdd, disabl
     return categories.filter((c) => categoryIdsWithItems.has(String(c.id)))
   }, [items, categories])
 
+  const fuse = useMemo(() => {
+    return new Fuse(items, {
+      keys: ['name', 'short_code'], // Search by name or any short code if available
+      threshold: 0.4,               // Allows for typos (0.0 is exact match, 1.0 is match anything)
+      ignoreLocation: true,         // Match anywhere in the string
+    })
+  }, [items])
+
   const visible = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    return items.filter(
+    const needle = search.trim()
+    
+    // Step 1: Fuzzy search if there's a search term
+    let searchResults = items
+    if (needle) {
+      searchResults = fuse.search(needle).map((result) => result.item)
+    }
+
+    // Step 2: Apply category and food_type filters
+    return searchResults.filter(
       (item) =>
         item.is_available &&
         (!categoryId || String(item.category) === categoryId) &&
-        (!foodType || item.food_type === foodType) &&
-        (!needle || item.name.toLowerCase().includes(needle)),
+        (!foodType || item.food_type === foodType),
     )
-  }, [items, search, categoryId, foodType])
+  }, [items, fuse, search, categoryId, foodType])
 
   return (
     <div className="flex h-full min-h-0 flex-col space-y-4">
