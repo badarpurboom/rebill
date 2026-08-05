@@ -41,6 +41,7 @@ export default function Tables() {
   const [payingOrder, setPayingOrder] = useState(null)
   const [quickCustomerOpen, setQuickCustomerOpen] = useState(false)
   const [pendingOrder, setPendingOrder] = useState(null)
+  const [startingTakeaway, setStartingTakeaway] = useState(false)
 
   /* Load */
   const load = useCallback(async () => {
@@ -110,6 +111,19 @@ export default function Tables() {
   const openTable = (table) => {
     if (!table.is_active) { toast.info(`Table ${table.number} is inactive.`); return }
     navigate(`/pos?table=${table.id}`)
+  }
+
+  /* Start new Takeaway order */
+  const handleStartTakeaway = async () => {
+    setStartingTakeaway(true)
+    try {
+      const order = await orderApi.createTakeaway()
+      navigate(`/pos?order=${order.id}`)
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to start takeaway.'))
+    } finally {
+      setStartingTakeaway(false)
+    }
   }
 
   /* Handle Pay Bill click from table */
@@ -186,6 +200,18 @@ export default function Tables() {
               </svg>
               {todayLabel()}
             </div>
+
+            {/* Takeaway Button */}
+            <button
+              onClick={handleStartTakeaway}
+              disabled={startingTakeaway}
+              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-60"
+            >
+              <svg className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              {startingTakeaway ? 'Starting...' : 'Takeaway'}
+            </button>
 
             {/* Live View toggle */}
             <button
