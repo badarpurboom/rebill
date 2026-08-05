@@ -1,48 +1,93 @@
-import { useState } from 'react'
-import { bills as billApi, PAYMENT_MODES } from '@/services/billing'
-import { errorMessage } from '@/services/api'
-import { money } from '@/utils/format'
-import Button from '@/components/ui/Button'
+import { useState, useEffect } from 'react'
 import Modal from '@/components/ui/Modal'
+import Button from '@/components/ui/Button'
+import { money } from '@/utils/format'
+import { orders as orderApi, bills as billApi, restaurantSettings } from '@/services/billing'
+import { errorMessage } from '@/services/api'
 import ThermalBill from '@/components/print/ThermalBill'
 import PrintSlipModal from '@/components/print/PrintSlipModal'
+import { CouponInput, LoyaltyRow } from '@/components/pos/CartPanel'
 
-/**
- * Bill generated → collect payment → table frees up.
- *
- * Only the amount and the mode are recorded. No card digits, no UPI id — the
- * requirements are explicit about not storing them, so they are never collected.
- */
-export default function PaymentModal({ bill: initialBill, onClose, onPaid }) {
-  const [bill, setBill] = useState(initialBill)
+const PAYMENT_MODES = [
+  { value: 'CASH', label: 'Cash', icon: '💵' },
+  { value: 'UPI', label: 'UPI / QR', icon: '📱' },
+  { value: 'CARD', label: 'Card / POS', icon: '💳' },
+]
+
+export default function PaymentModal({ order, onClose, onPaid }) {
+  const [settings, setSettings] = useState(null)
+  const [bill, setBill] = useState(order?.bill ?? null)
+  const [totals, setTotals] = useState(null)
+  const [discount, setDiscount] = useState('')
+  const [redeemPoints, setRedeemPoints] = useState(0)
   const [mode, setMode] = useState('CASH')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [printing, setPrinting] = useState(false)
 
-  const paid = bill.status === 'PAID'
-  const hasRedeem = Number(bill.redeem_amount) > 0
-  const due = hasRedeem ? bill.net_payable : bill.total
+  const paid = bill?.status === 'PAID'
+  
+  // Preview Totals
+  useEffect(() => {
+    let active = true
+    const fetchPreview = async () => {
+      try {
+        const payload = {
+          discount_percent: discount === '' ? '0' : discount,
+          redeem_points: redeemPoints,
+        }
+        const preview = await orderApi.preview(order.id, payload)
+        if (active) setTotals(preview)
+        
+        // Also fetch settings if needed for max_discount
+        if (active && !settings) {
+          const sysSettings = await restaurantSettings.get()
+          setSettings(sysSettings)
+        }
+      } catch (err) {
+        console.error('Failed to preview totals:', err)
+      }
+    }
+    
+    if (!bill) {
+      fetchPreview()
+    }
+    return () => { active = false }
+  }, [order.id, discount, redeemPoints, bill])
 
-  const takePayment = async () => {
+  const maxDiscount = settings?.max_discount_percent ?? 0
+
+  const handlePayClick = () => {
+    proceedWithPayment()
+  }
+
+  const proceedWithPayment = async () => {
     setBusy(true)
     setError('')
     try {
-      const updated = await billApi.pay(bill.id, mode)
+      // 1. Generate Bill
+      const payload = {
+        discount_percent: discount === '' ? '0' : discount,
+        redeem_points: redeemPoints,
+      }
+      const newBill = await orderApi.generateBill(order.id, payload)
+      
+      // 2. Pay Bill
+      const updated = await billApi.pay(newBill.id, mode)
       setBill(updated)
       onPaid?.(updated)
     } catch (err) {
-      setError(errorMessage(err, 'Failed to record payment.'))
+      setError(errorMessage(err, 'Failed to process payment.'))
     } finally {
       setBusy(false)
     }
   }
 
-  if (printing) {
+  if (printing && bill) {
     return (
       <PrintSlipModal
         title={`Bill ${bill.bill_number}`}
-        subtitle={`Table ${bill.table_number} · ${money(due)}`}
+        subtitle={`Table ${bill.table_number} · ${money(bill.net_payable)}`}
         onClose={() => setPrinting(false)}
       >
         <ThermalBill bill={bill} />
@@ -50,16 +95,30 @@ export default function PaymentModal({ bill: initialBill, onClose, onPaid }) {
     )
   }
 
+  const due = bill ? bill.net_payable : (totals?.total || 0)
+  const hasRedeem = bill ? Number(bill.redeem_amount) > 0 : (totals?.redeem_amount > 0)
+  
+  const displaySubtotal = bill ? bill.subtotal : totals?.subtotal
+  const displayDiscountAmount = bill ? bill.discount_amount : totals?.discount_amount
+  const displayDiscountPercent = bill ? bill.discount_percent : (totals?.discount_percent || discount)
+  const displayCgstPercent = bill ? bill.cgst_percent : totals?.cgst_percent
+  const displayCgstAmount = bill ? bill.cgst_amount : totals?.cgst_amount
+  const displaySgstPercent = bill ? bill.sgst_percent : totals?.sgst_percent
+  const displaySgstAmount = bill ? bill.sgst_amount : totals?.sgst_amount
+  const displayGrossTotal = bill ? bill.total : totals?.total
+  const displayPointsRedeemed = bill ? bill.points_redeemed : totals?.points_redeemed
+  const displayRedeemAmount = bill ? bill.redeem_amount : totals?.redeem_amount
+
   return (
     <Modal
       open
       size="sm"
       onClose={onClose}
-      title={paid ? '✅ Payment Complete' : `Bill ${bill.bill_number}`}
+      title={paid ? '✅ Payment Complete' : `Checkout · Table ${order.table_number}`}
       subtitle={
         paid
-          ? `Table ${bill.table_number} is now available`
-          : `Table ${bill.table_number} · Payment Pending`
+          ? `Table ${order.table_number} is now available`
+          : `Total amount due: ${money(due)}`
       }
       footer={
         paid ? (
@@ -71,10 +130,7 @@ export default function PaymentModal({ bill: initialBill, onClose, onPaid }) {
           </>
         ) : (
           <>
-            <Button variant="secondary" onClick={() => setPrinting(true)}>
-              🖨 Print
-            </Button>
-            <Button onClick={takePayment} loading={busy}>
+            <Button onClick={handlePayClick} loading={busy || !totals}>
               Collect {money(due)}
             </Button>
           </>
@@ -82,19 +138,37 @@ export default function PaymentModal({ bill: initialBill, onClose, onPaid }) {
       }
     >
       <div className="space-y-4">
+        {!paid && (
+          <div className="space-y-3">
+            <CouponInput
+              subtotal={displaySubtotal || 0}
+              customerId={order.customer}
+              onApplyDiscount={(val) => setDiscount(val)}
+            />
+            {order.customer && (
+              <LoyaltyRow
+                totals={totals}
+                redeemPoints={redeemPoints}
+                onRedeemChange={(val) => setRedeemPoints(val)}
+                hasCustomer={true}
+              />
+            )}
+          </div>
+        )}
+
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <dl className="space-y-1 text-sm">
-            <Row label="Sub Total" value={bill.subtotal} />
-            {Number(bill.discount_amount) > 0 && (
+            <Row label="Sub Total" value={displaySubtotal} />
+            {Number(displayDiscountAmount) > 0 && (
               <div className="flex items-center justify-between text-xs py-1">
                 <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  🏷️ Manual Discount ({Number(bill.discount_percent).toFixed(1)}%)
+                  🏷️ Discount ({Number(displayDiscountPercent).toFixed(1)}%)
                 </span>
-                <span className="tabular font-semibold text-emerald-700">-{money(bill.discount_amount)}</span>
+                <span className="tabular font-semibold text-emerald-700">-{money(displayDiscountAmount)}</span>
               </div>
             )}
-            <Row label={`CGST ${Number(bill.cgst_percent).toFixed(2)}%`} value={bill.cgst_amount} />
-            <Row label={`SGST ${Number(bill.sgst_percent).toFixed(2)}%`} value={bill.sgst_amount} />
+            <Row label={`CGST ${Number(displayCgstPercent).toFixed(2)}%`} value={displayCgstAmount} />
+            <Row label={`SGST ${Number(displaySgstPercent).toFixed(2)}%`} value={displaySgstAmount} />
           </dl>
           <div className="mt-2 flex items-baseline justify-between border-t border-slate-300 pt-2">
             <span className={hasRedeem ? 'text-sm text-slate-500' : 'font-semibold text-slate-900'}>
@@ -103,7 +177,7 @@ export default function PaymentModal({ bill: initialBill, onClose, onPaid }) {
             <span
               className={`tabular ${hasRedeem ? 'text-sm text-slate-500' : 'text-2xl font-bold text-slate-900'}`}
             >
-              {money(bill.total)}
+              {money(displayGrossTotal)}
             </span>
           </div>
 
@@ -111,31 +185,31 @@ export default function PaymentModal({ bill: initialBill, onClose, onPaid }) {
             <>
               <div className="mt-1 flex items-center justify-between text-xs py-1">
                 <span className="inline-flex items-center gap-1 font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
-                  ⭐ Points Redeemed ({bill.points_redeemed} Pts)
+                  ⭐ Points Redeemed ({displayPointsRedeemed} Pts)
                 </span>
-                <span className="tabular font-semibold text-brand-700">-{money(bill.redeem_amount)}</span>
+                <span className="tabular font-semibold text-brand-700">-{money(displayRedeemAmount)}</span>
               </div>
               <div className="mt-1 flex items-baseline justify-between border-t border-slate-300 pt-1.5">
                 <span className="font-semibold text-slate-900">Amount Payable</span>
                 <span className="tabular text-2xl font-bold text-slate-900">
-                  {money(bill.net_payable)}
+                  {money(due)}
                 </span>
               </div>
             </>
           )}
 
-          {bill.customer_name && (
+          {order.customer_name && (
             <p className="mt-2 text-xs text-slate-500">
-              {bill.customer_name} · {bill.customer_phone}
-              {bill.points_earned > 0 && (
+              {order.customer_name} · {order.customer_phone}
+              {bill && bill.points_earned > 0 && (
                 <span className="text-emerald-700">
                   {' '}
-                  · {paid ? `+${bill.points_earned} points earned` : `+${bill.points_earned} points will be earned`}
+                  · +{bill.points_earned} points earned
                 </span>
               )}
             </p>
           )}
-          {bill.approved_by_name && (
+          {bill?.approved_by_name && (
             <p className="mt-1 text-xs text-amber-700">
               Discount approved by {bill.approved_by_name}
             </p>
@@ -182,6 +256,7 @@ export default function PaymentModal({ bill: initialBill, onClose, onPaid }) {
           </p>
         )}
       </div>
+
     </Modal>
   )
 }

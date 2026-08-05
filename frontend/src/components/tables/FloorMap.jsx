@@ -29,7 +29,7 @@ const STATUS_CFG = {
 }
 
 /* ─── Card View (Normal Mode — matches Stitch design) ──────────────── */
-function TableCard({ table, onClick }) {
+function TableCard({ table, onClick, onPayClick }) {
   const cfg = STATUS_CFG[table.status] ?? STATUS_CFG.AVAILABLE
   const num = String(table.number).padStart(2, '0')
   const bill = table.running_total
@@ -37,8 +37,9 @@ function TableCard({ table, onClick }) {
     : '–'
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onClick?.(table)}
       className={[
         'group w-full text-left bg-white rounded-xl border border-slate-200 border-l-4 shadow-sm',
@@ -95,8 +96,22 @@ function TableCard({ table, onClick }) {
             </p>
           </div>
         </div>
+
+        {(table.status === 'BILLED' || table.status === 'OCCUPIED') && (
+          <div className="mt-3">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPayClick?.(e, table);
+              }}
+              className="w-full bg-rose-600 text-white rounded-lg py-1.5 text-xs font-bold shadow-md hover:bg-rose-700 active:scale-95 transition-all"
+            >
+              Pay Bill
+            </button>
+          </div>
+        )}
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -212,7 +227,7 @@ function CanvasMode({ tables, selectedId, onTableClick, onLayoutChange }) {
 }
 
 /* ─── Main FloorMap Component ──────────────────────────────────────── */
-export default function FloorMap({ tables, editing = false, selectedId = null, onTableClick, onLayoutChange }) {
+export default function FloorMap({ tables, editing = false, selectedId = null, onTableClick, onLayoutChange, onPayClick }) {
   if (editing) {
     return (
       <CanvasMode
@@ -227,7 +242,7 @@ export default function FloorMap({ tables, editing = false, selectedId = null, o
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
       {tables.map((table) => (
-        <TableCard key={table.id} table={table} onClick={onTableClick} />
+        <TableCard key={table.id} table={table} onClick={onTableClick} onPayClick={onPayClick} />
       ))}
     </div>
   )

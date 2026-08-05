@@ -16,6 +16,7 @@ import QuickCustomerModal from '@/components/customers/QuickCustomerModal'
 import TableHoverTooltip from '@/components/tables/TableHoverTooltip'
 import PrintSlipModal from '@/components/print/PrintSlipModal'
 import ThermalKOT from '@/components/print/ThermalKOT'
+import ThermalBill from '@/components/print/ThermalBill'
 import {
   IconPos,
   IconTables,
@@ -46,10 +47,10 @@ export default function POS() {
   const [generating, setGenerating] = useState(false)
 
   const [kotSlip, setKotSlip] = useState(null)
+  const [bill, setBill] = useState(null)
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false)
   const [ownerAuth, setOwnerAuth] = useState(null)
   const [pickingCustomer, setPickingCustomer] = useState(false)
-  const [quickCustomerOpen, setQuickCustomerOpen] = useState(false)
-  const [bill, setBill] = useState(null)
 
   // Fetch menu, settings and active open takeaway orders
   useEffect(() => {
@@ -189,95 +190,43 @@ export default function POS() {
     }
   }
 
-  const setCustomer = async (customer) => {
-    try {
-      const updated = await orderApi.setCustomer(order.id, customer?.id ?? null)
-      setOrder(updated)
-      setRedeemPoints(0)
-      setPickingCustomer(false)
-      toast.success(customer ? `${customer.name} attached` : 'Customer detached')
-    } catch (error) {
-      toast.error(errorMessage(error, 'Failed to attach customer.'))
-    }
-  }
-
-  const generateBill = async (ownerUsername, ownerPassword) => {
-    setGenerating(true)
-    try {
-      const payload = {
-        discount_percent: discount === '' ? '0' : discount,
-        redeem_points: redeemPoints,
-      }
-      if (ownerUsername) {
-        payload.owner_username = ownerUsername
-        payload.owner_password = ownerPassword
-      }
-      const created = await orderApi.generateBill(order.id, payload)
-      setOwnerAuth(null)
-      setBill(created)
-    } catch (error) {
-      const message = errorMessage(error, 'Failed to generate bill.')
-      if (ownerUsername) {
-        setOwnerAuth((current) => ({ ...current, error: message }))
-      } else {
-        toast.error(message)
-      }
-    } finally {
-      setGenerating(false)
-    }
-  }
-
   const onGenerateBill = () => {
-    if (!order?.customer) {
-      setQuickCustomerOpen(true)
-      return
+    // Generate a proforma bill object for ThermalSlip
+    const proforma = {
+      restaurant_name: 'PROFORMA INVOICE', // Usually comes from settings
+      restaurant_address: '',
+      gstin: '',
+      bill_number: 'PROFORMA',
+      table_number: order?.table_number,
+      created_at: new Date().toISOString(),
+      created_by_name: order?.created_by_name || 'Staff',
+      customer_name: order?.customer_name,
+      customer_phone: order?.customer_phone,
+      items: order?.items?.map(i => ({
+        variant_name: i.variant_name,
+        quantity: i.quantity,
+        price: i.price,
+        amount: Number(i.price) * Number(i.quantity)
+      })) || [],
+      subtotal: totals?.subtotal || 0,
+      discount_percent: '0',
+      discount_amount: '0',
+      cgst_percent: totals?.cgst_percent || '0',
+      cgst_amount: totals?.cgst_amount || '0',
+      sgst_percent: totals?.sgst_percent || '0',
+      sgst_amount: totals?.sgst_amount || '0',
+      total: totals?.total || 0,
+      points_redeemed: 0,
+      redeem_amount: '0',
+      net_payable: totals?.total || 0,
+      status: 'UNPAID',
     }
-    proceedWithBillGeneration()
-  }
-
-  const proceedWithBillGeneration = () => {
-    if (needsApproval) {
-      setOwnerAuth({ error: '' })
-      return
+    
+    if (order?.order_type === 'TAKEAWAY') {
+      setCheckoutModalOpen(true)
+    } else {
+      setBill(proforma)
     }
-    generateBill()
-  }
-
-  const handleQuickCustomerSave = async (savedCustomer, pointsToRedeem = 0) => {
-    try {
-      const updated = await orderApi.setCustomer(order.id, savedCustomer.id)
-      setOrder(updated)
-      setRedeemPoints(pointsToRedeem)
-      setQuickCustomerOpen(false)
-      toast.success(`Attached ${savedCustomer.name} to bill!`)
-
-      if (needsApproval) {
-        setOwnerAuth({ error: '' })
-        return
-      }
-
-      setGenerating(true)
-      try {
-        const payload = {
-          discount_percent: discount === '' ? '0' : discount,
-          redeem_points: pointsToRedeem,
-        }
-        const created = await orderApi.generateBill(order.id, payload)
-        setOwnerAuth(null)
-        setBill(created)
-      } catch (err) {
-        toast.error(errorMessage(err, 'Failed to generate bill.'))
-      } finally {
-        setGenerating(false)
-      }
-    } catch (error) {
-      toast.error(errorMessage(error, 'Failed to attach customer.'))
-    }
-  }
-
-  const handleQuickCustomerSkip = () => {
-    setQuickCustomerOpen(false)
-    proceedWithBillGeneration()
   }
 
   const finishTable = () => {
@@ -430,33 +379,26 @@ export default function POS() {
         <CustomerPickerModal
           attached={order.customer_detail}
           onClose={() => setPickingCustomer(false)}
-          onPick={setCustomer}
-          onDetach={() => setCustomer(null)}
         />
       )}
 
-      {quickCustomerOpen && (
-        <QuickCustomerModal
-          open={quickCustomerOpen}
-          minRedeemPoints={settings?.loyalty_min_redeem_points ?? 50}
-          maxRedeemable={totals?.max_redeemable_points}
-          onClose={() => setQuickCustomerOpen(false)}
-          onSaveAndProceed={handleQuickCustomerSave}
-          onSkipAndProceed={handleQuickCustomerSkip}
-        />
+      {bill && (
+        <PrintSlipModal
+          title={`Proforma Bill`}
+          subtitle={`Table ${bill.table_number}`}
+          onClose={() => setBill(null)}
+        >
+          <ThermalBill bill={bill} />
+        </PrintSlipModal>
       )}
 
-      {ownerAuth && (
-        <OwnerAuthModal
-          discountPercent={discount}
-          maxPercent={settings?.max_discount_percent ?? 0}
-          error={ownerAuth.error}
-          onCancel={() => setOwnerAuth(null)}
-          onConfirm={generateBill}
+      {checkoutModalOpen && (
+        <PaymentModal
+          order={order}
+          onClose={() => setCheckoutModalOpen(false)}
+          onPaid={finishTable}
         />
       )}
-
-      {bill && <PaymentModal bill={bill} onClose={finishTable} />}
 
       {/* Switch active takeaway orders modal */}
       {showTakeawaysModal && (

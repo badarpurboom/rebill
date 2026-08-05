@@ -4,11 +4,14 @@ import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/context/ToastContext'
 import { errorMessage } from '@/services/api'
 import { tables as tableApi, TABLE_STATUS } from '@/services/tables'
+import { orders as orderApi } from '@/services/billing'
 import { money } from '@/utils/format'
 import Button from '@/components/ui/Button'
 import { EmptyState, PageLoader } from '@/components/ui/Misc'
 import FloorMap, { FloorLegend } from '@/components/tables/FloorMap'
 import TableFormModal from '@/components/tables/TableFormModal'
+import PaymentModal from '@/components/pos/PaymentModal'
+import QuickCustomerModal from '@/components/customers/QuickCustomerModal'
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function todayLabel() {
@@ -35,6 +38,9 @@ export default function Tables() {
   const [saving, setSaving] = useState(false)
   const [formTable, setFormTable] = useState(null)
   const [liveMode, setLiveMode] = useState(false)
+  const [payingOrder, setPayingOrder] = useState(null)
+  const [quickCustomerOpen, setQuickCustomerOpen] = useState(false)
+  const [pendingOrder, setPendingOrder] = useState(null)
 
   /* Load */
   const load = useCallback(async () => {
@@ -104,6 +110,48 @@ export default function Tables() {
   const openTable = (table) => {
     if (!table.is_active) { toast.info(`Table ${table.number} is inactive.`); return }
     navigate(`/pos?table=${table.id}`)
+  }
+
+  /* Handle Pay Bill click from table */
+  const handlePayClick = async (e, table) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!table.open_order_id) {
+      toast.error('No open order found for this table.')
+      return
+    }
+    setLoading(true)
+    try {
+      const order = await orderApi.get(table.open_order_id)
+      if (!order.customer) {
+        setPendingOrder(order)
+        setQuickCustomerOpen(true)
+      } else {
+        setPayingOrder(order)
+      }
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to fetch order.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleQuickCustomerSave = async (savedCustomer) => {
+    try {
+      setLoading(true)
+      const updatedOrder = await orderApi.setCustomer(pendingOrder.id, savedCustomer.id)
+      setQuickCustomerOpen(false)
+      setPayingOrder(updatedOrder)
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to attach customer.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleQuickCustomerSkip = () => {
+    setQuickCustomerOpen(false)
+    setPayingOrder(pendingOrder)
   }
 
   if (loading) return <PageLoader label="Loading floor map…" />
@@ -218,6 +266,7 @@ export default function Tables() {
           editing={editing}
           onTableClick={openTable}
           onLayoutChange={moveTable}
+          onPayClick={handlePayClick}
         />
       )}
 
@@ -261,6 +310,31 @@ export default function Tables() {
             setFormTable(null)
             toast.success(`Table ${deleted.number} removed.`)
           }}
+        />
+      )}
+
+      {payingOrder && (
+        <PaymentModal
+          order={payingOrder}
+          onClose={() => {
+            setPayingOrder(null)
+            load() // Refresh tables
+          }}
+          onPaid={() => {
+            setPayingOrder(null)
+            load() // Refresh tables
+          }}
+        />
+      )}
+
+      {quickCustomerOpen && (
+        <QuickCustomerModal
+          open={quickCustomerOpen}
+          minRedeemPoints={0}
+          maxRedeemable={0}
+          onClose={() => setQuickCustomerOpen(false)}
+          onSaveAndProceed={handleQuickCustomerSave}
+          onSkipAndProceed={handleQuickCustomerSkip}
         />
       )}
     </div>

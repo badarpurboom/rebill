@@ -135,65 +135,71 @@ export default function CartPanel({
           {unsentCount > 0 ? `Send KOT (${unsentCount} new items)` : 'All items sent to kitchen'}
         </Button>
 
-        <div className="grid grid-cols-2 gap-2">
-          {/* Discount Input */}
-          <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 p-2.5">
-            <div className="mb-1 flex items-center justify-between text-xs font-extrabold text-slate-700">
-              <span className="flex items-center gap-1">
-                Discount %
-              </span>
-              <span className="text-[9px] text-slate-400 font-semibold truncate">Max {Number(maxDiscount).toFixed(0)}%</span>
+        {order?.order_type === 'TAKEAWAY' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              {/* Discount Input */}
+              <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 p-2.5">
+                <div className="mb-1 flex items-center justify-between text-xs font-extrabold text-slate-700">
+                  <span className="flex items-center gap-1">
+                    Discount %
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-semibold truncate">Max {Number(maxDiscount).toFixed(0)}%</span>
+                </div>
+                <Input
+                  id="discount"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  inputMode="decimal"
+                  value={discount}
+                  onChange={(e) => onDiscountChange(e.target.value)}
+                  placeholder="0"
+                  className={`w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs font-bold focus:border-rose-500 focus:outline-none focus:ring-0 ${needsApproval ? 'border-amber-400 bg-amber-50 text-amber-900' : ''}`}
+                />
+                {needsApproval && (
+                  <p className="mt-1 text-[9px] font-bold text-amber-700 leading-tight">
+                    ⚠ Owner req.
+                  </p>
+                )}
+              </div>
+
+              {/* Coupon Code Input */}
+              <CouponInput
+                subtotal={totals?.subtotal || 0}
+                customerId={order?.customer}
+                onApplyDiscount={(percent) => onDiscountChange(String(percent))}
+              />
             </div>
-            <Input
-              id="discount"
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
-              inputMode="decimal"
-              value={discount}
-              onChange={(e) => onDiscountChange(e.target.value)}
-              placeholder="0"
-              className={`w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs font-bold focus:border-rose-500 focus:outline-none focus:ring-0 ${needsApproval ? 'border-amber-400 bg-amber-50 text-amber-900' : ''}`}
+
+            {/* Loyalty Points Redemption */}
+            <LoyaltyRow
+              totals={totals}
+              redeemPoints={redeemPoints}
+              onRedeemChange={onRedeemChange}
+              hasCustomer={Boolean(order?.customer)}
             />
-            {needsApproval && (
-              <p className="mt-1 text-[9px] font-bold text-amber-700 leading-tight">
-                ⚠ Owner req.
-              </p>
-            )}
-          </div>
-
-          {/* Coupon Code Input */}
-          <CouponInput
-            subtotal={totals?.subtotal || 0}
-            customerId={order?.customer}
-            onApplyDiscount={(percent) => onDiscountChange(String(percent))}
-          />
-        </div>
-
-        {/* Loyalty Points Redemption */}
-        <LoyaltyRow
-          totals={totals}
-          redeemPoints={redeemPoints}
-          onRedeemChange={onRedeemChange}
-          hasCustomer={Boolean(order?.customer)}
-        />
+          </>
+        )}
 
         {/* Calculation Table */}
-        <dl className="space-y-0.5 text-xs font-medium text-slate-600 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-          <TotalRow label="Sub Total" value={totals?.subtotal} />
-          {Number(totals?.discount_amount ?? 0) > 0 && (
-            <div className="flex items-center justify-between text-[11px] py-0.5">
-              <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded-lg border border-emerald-200">
-                <IconReceipt className="size-3 text-emerald-600" />
-                Disc ({Number(totals.discount_percent).toFixed(1)}%)
-              </span>
-              <span className="tabular font-extrabold text-emerald-700">-{money(totals.discount_amount)}</span>
-            </div>
-          )}
-          <TotalRow label={`CGST ${Number(totals?.cgst_percent ?? 0).toFixed(2)}%`} value={totals?.cgst_amount} />
-          <TotalRow label={`SGST ${Number(totals?.sgst_percent ?? 0).toFixed(2)}%`} value={totals?.sgst_amount} />
-        </dl>
+        {order?.order_type === 'TAKEAWAY' && (
+          <dl className="space-y-0.5 text-xs font-medium text-slate-600 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+            <TotalRow label="Sub Total" value={totals?.subtotal} />
+            {Number(totals?.discount_amount ?? 0) > 0 && (
+              <div className="flex items-center justify-between text-[11px] py-0.5">
+                <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded-lg border border-emerald-200">
+                  <IconReceipt className="size-3 text-emerald-600" />
+                  Disc ({Number(totals.discount_percent).toFixed(1)}%)
+                </span>
+                <span className="tabular font-extrabold text-emerald-700">-{money(totals.discount_amount)}</span>
+              </div>
+            )}
+            <TotalRow label={`CGST ${Number(totals?.cgst_percent ?? 0).toFixed(2)}%`} value={totals?.cgst_amount} />
+            <TotalRow label={`SGST ${Number(totals?.sgst_percent ?? 0).toFixed(2)}%`} value={totals?.sgst_amount} />
+          </dl>
+        )}
 
         <div className="flex items-baseline justify-between pt-0.5">
           <span className={Number(totals?.redeem_amount ?? 0) > 0 ? 'text-xs font-bold text-slate-400' : 'font-black text-slate-900 text-sm'}>
@@ -236,14 +242,14 @@ export default function CartPanel({
           loading={generating}
           disabled={items.length === 0}
         >
-          Generate Bill &amp; Checkout →
+          Print Bill
         </Button>
       </div>
     </div>
   )
 }
 
-function LoyaltyRow({ totals, redeemPoints, onRedeemChange, hasCustomer }) {
+export function LoyaltyRow({ totals, redeemPoints, onRedeemChange, hasCustomer }) {
   if (!totals?.loyalty_enabled) return null
 
   const max = totals.max_redeemable_points ?? 0
@@ -334,7 +340,7 @@ function TotalRow({ label, value, tone = 'text-slate-800' }) {
   )
 }
 
-function CouponInput({ subtotal, customerId, onApplyDiscount }) {
+export function CouponInput({ subtotal, customerId, onApplyDiscount }) {
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState(null)
