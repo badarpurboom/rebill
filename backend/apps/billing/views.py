@@ -140,14 +140,27 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         order = self._running_order(pk)
         serializer = AddOrderItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        variant = serializer.validated_data['variant']
+
+        variant = serializer.validated_data.get('variant')
         quantity = serializer.validated_data['quantity']
         note = serializer.validated_data['note']
+
+        if variant:
+            item_name = variant.item.name
+            portion = variant.portion
+            food_type = variant.item.food_type
+            unit_price = variant.price
+        else:
+            from apps.menu.models import Portion
+            item_name = serializer.validated_data['custom_name']
+            portion = serializer.validated_data.get('portion') or Portion.FULL
+            food_type = serializer.validated_data.get('food_type') or 'VEG'
+            unit_price = serializer.validated_data['unit_price']
 
         # Merge into an identical line only while it is still un-sent — once
         # the kitchen has a ticket, the next round has to be its own line.
         line = order.items.filter(
-            variant=variant, note=note, kot__isnull=True
+            variant=variant, item_name=item_name, note=note, kot__isnull=True
         ).first()
         if line:
             line.quantity += quantity
@@ -156,10 +169,10 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             line = OrderItem.objects.create(
                 order=order,
                 variant=variant,
-                item_name=variant.item.name,
-                portion=variant.portion,
-                food_type=variant.item.food_type,
-                unit_price=variant.price,
+                item_name=item_name,
+                portion=portion,
+                food_type=food_type,
+                unit_price=unit_price,
                 quantity=quantity,
                 note=note,
             )
@@ -176,20 +189,51 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             raise ValidationError('This item is not part of this order.')
 
         quantity = request.data.get('quantity')
+        target_line = line
+
         if quantity is not None:
             quantity = int(quantity)
             if quantity < 1:
                 line.delete()
                 order.save(update_fields=['updated_at'])
                 return Response(status=status.HTTP_204_NO_CONTENT)
-            line.quantity = quantity
 
-        if 'note' in request.data:
+            if line.kot_id is not None and quantity > line.quantity:
+                # This item was already sent on a previous KOT ticket.
+                # Do not mutate the sent line — add the extra quantity as an unsent item
+                # so a new KOT can be printed for the kitchen.
+                diff = quantity - line.quantity
+                note = str(request.data.get('note', line.note))[:120] if 'note' in request.data else line.note
+
+                unsent_line = order.items.filter(
+                    variant=line.variant, note=note, kot__isnull=True
+                ).first()
+                if unsent_line:
+                    unsent_line.quantity += diff
+                    unsent_line.save(update_fields=['quantity'])
+                    target_line = unsent_line
+                else:
+                    target_line = OrderItem.objects.create(
+                        order=order,
+                        variant=line.variant,
+                        item_name=line.item_name,
+                        portion=line.portion,
+                        food_type=line.food_type,
+                        unit_price=line.unit_price,
+                        quantity=diff,
+                        note=note,
+                    )
+            else:
+                line.quantity = quantity
+                if 'note' in request.data:
+                    line.note = str(request.data['note'])[:120]
+                line.save()
+        elif 'note' in request.data:
             line.note = str(request.data['note'])[:120]
+            line.save()
 
-        line.save()
         order.save(update_fields=['updated_at'])
-        return Response(OrderItemSerializer(line).data)
+        return Response(OrderItemSerializer(target_line).data)
 
     @action(detail=True, methods=['delete'], url_path=r'items/(?P<item_id>\d+)/remove')
     @transaction.atomic
@@ -382,6 +426,33 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                 f'This order has been billed ({order.get_status_display()}) and cannot be modified.'
             )
         return order
+
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def void(self, request, pk=None):
+        """Cancel a running order that has no bill yet (e.g. customer walked away).
+        
+        The table is immediately freed back to AVAILABLE.
+        No bill is created — this is a hard delete of the running session.
+        """
+        order = _order_queryset().filter(pk=pk).first()
+        if order is None:
+            raise ValidationError({'detail': 'Order not found.'})
+        if order.status != OrderStatus.RUNNING:
+            raise ValidationError({'detail': f'Only RUNNING orders can be voided (this is {order.status}).'})
+        if hasattr(order, 'bill'):
+            raise ValidationError({'detail': 'A bill already exists — use cancel bill instead.'})
+
+        order.status = OrderStatus.CANCELLED
+        order.save(update_fields=['status', 'updated_at'])
+
+        if order.table:
+            # Only free the table if no other open order is still linked to it
+            other_open = order.table.orders.filter(status__in=OPEN_STATUSES).exclude(pk=order.pk).exists()
+            if not other_open:
+                order.table.mark(TableStatus.AVAILABLE)
+
+        return Response({'detail': f'Order #{order.pk} voided. Table is now available.'})
 
 
 class BillViewSet(viewsets.ReadOnlyModelViewSet):

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { money, priceShort } from '@/utils/format'
 import Button from '@/components/ui/Button'
-import { Input } from '@/components/ui/Field'
 import { Badge, FoodTypeDot } from '@/components/ui/Misc'
 import { couponsService } from '@/services/coupons'
 import {
@@ -17,17 +16,13 @@ import {
 export default function CartPanel({
   order,
   totals,
-  discount,
-  maxDiscount,
-  needsApproval,
-  redeemPoints,
-  onRedeemChange,
   busyItemId,
   onQuantity,
   onRemove,
-  onDiscountChange,
   onSendKot,
   onGenerateBill,
+  onPayBill,
+  onAddCustomItem,
   sendingKot,
   generating,
 }) {
@@ -45,9 +40,19 @@ export default function CartPanel({
             {order?.order_type === 'TAKEAWAY' ? 'Takeaway Parcel' : `Table ${order?.table_number ?? ''}`}
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-extrabold text-slate-700 border border-slate-200">
-          {items.length} {items.length === 1 ? 'item' : 'items'}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onAddCustomItem}
+            className="flex items-center gap-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 text-xs font-bold hover:bg-amber-100 transition-all active:scale-95 shadow-2xs"
+            title="Add a custom item not listed in the menu"
+          >
+            + Custom Item
+          </button>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-extrabold text-slate-700 border border-slate-200">
+            {items.length} {items.length === 1 ? 'item' : 'items'}
+          </span>
+        </div>
       </div>
 
       {/* Cart Items List */}
@@ -135,72 +140,6 @@ export default function CartPanel({
           {unsentCount > 0 ? `Send KOT (${unsentCount} new items)` : 'All items sent to kitchen'}
         </Button>
 
-        {order?.order_type === 'TAKEAWAY' && (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              {/* Discount Input */}
-              <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 p-2.5">
-                <div className="mb-1 flex items-center justify-between text-xs font-extrabold text-slate-700">
-                  <span className="flex items-center gap-1">
-                    Discount %
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-semibold truncate">Max {Number(maxDiscount).toFixed(0)}%</span>
-                </div>
-                <Input
-                  id="discount"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  inputMode="decimal"
-                  value={discount}
-                  onChange={(e) => onDiscountChange(e.target.value)}
-                  placeholder="0"
-                  className={`w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs font-bold focus:border-rose-500 focus:outline-none focus:ring-0 ${needsApproval ? 'border-amber-400 bg-amber-50 text-amber-900' : ''}`}
-                />
-                {needsApproval && (
-                  <p className="mt-1 text-[9px] font-bold text-amber-700 leading-tight">
-                    ⚠ Owner req.
-                  </p>
-                )}
-              </div>
-
-              {/* Coupon Code Input */}
-              <CouponInput
-                subtotal={totals?.subtotal || 0}
-                customerId={order?.customer}
-                onApplyDiscount={(percent) => onDiscountChange(String(percent))}
-              />
-            </div>
-
-            {/* Loyalty Points Redemption */}
-            <LoyaltyRow
-              totals={totals}
-              redeemPoints={redeemPoints}
-              onRedeemChange={onRedeemChange}
-              hasCustomer={Boolean(order?.customer)}
-            />
-          </>
-        )}
-
-        {/* Calculation Table */}
-        {order?.order_type === 'TAKEAWAY' && (
-          <dl className="space-y-0.5 text-xs font-medium text-slate-600 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-            <TotalRow label="Sub Total" value={totals?.subtotal} />
-            {Number(totals?.discount_amount ?? 0) > 0 && (
-              <div className="flex items-center justify-between text-[11px] py-0.5">
-                <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded-lg border border-emerald-200">
-                  <IconReceipt className="size-3 text-emerald-600" />
-                  Disc ({Number(totals.discount_percent).toFixed(1)}%)
-                </span>
-                <span className="tabular font-extrabold text-emerald-700">-{money(totals.discount_amount)}</span>
-              </div>
-            )}
-            <TotalRow label={`CGST ${Number(totals?.cgst_percent ?? 0).toFixed(2)}%`} value={totals?.cgst_amount} />
-            <TotalRow label={`SGST ${Number(totals?.sgst_percent ?? 0).toFixed(2)}%`} value={totals?.sgst_amount} />
-          </dl>
-        )}
-
         <div className="flex items-baseline justify-between pt-0.5">
           <span className={Number(totals?.redeem_amount ?? 0) > 0 ? 'text-xs font-bold text-slate-400' : 'font-black text-slate-900 text-sm'}>
             Total Amount
@@ -234,16 +173,27 @@ export default function CartPanel({
           </>
         )}
 
-        {/* Generate Bill CTA */}
-        <Button
-          size="sm"
-          className="w-full justify-center py-2 text-sm font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md shadow-rose-600/20 active:scale-95 transition-all"
-          onClick={onGenerateBill}
-          loading={generating}
-          disabled={items.length === 0}
-        >
-          Print Bill
-        </Button>
+        {/* Action CTAs */}
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="flex-1 justify-center py-2 text-xs font-bold border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl active:scale-95 transition-all"
+            onClick={onGenerateBill}
+            loading={generating}
+            disabled={items.length === 0}
+          >
+            Print Bill
+          </Button>
+          <Button
+            size="sm"
+            className="flex-1 justify-center py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+            onClick={onPayBill}
+            disabled={items.length === 0}
+          >
+            Pay & Settle
+          </Button>
+        </div>
       </div>
     </div>
   )

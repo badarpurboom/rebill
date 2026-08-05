@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from apps.menu.models import MenuItemVariant
+from apps.menu.models import MenuItemVariant, Portion
 from apps.settings_app.models import RestaurantSettings
 
 from .models import Bill, KOT, Order, OrderItem, PaymentMode
@@ -27,16 +27,36 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 class AddOrderItemSerializer(serializers.Serializer):
-    """Cashier taps a menu tile — only the variant and how many."""
+    """Cashier taps a menu tile or enters a custom item not in the menu."""
 
-    variant = serializers.PrimaryKeyRelatedField(queryset=MenuItemVariant.objects.all())
+    variant = serializers.PrimaryKeyRelatedField(
+        queryset=MenuItemVariant.objects.all(), required=False, allow_null=True, default=None
+    )
+    custom_name = serializers.CharField(max_length=120, required=False, allow_blank=True, default='')
+    unit_price = serializers.DecimalField(
+        max_digits=8, decimal_places=2, required=False, allow_null=True, min_value=Decimal('0.00'), default=None
+    )
+    portion = serializers.ChoiceField(choices=Portion.choices, required=False, default=Portion.FULL)
+    food_type = serializers.CharField(max_length=8, required=False, allow_blank=True, default='VEG')
     quantity = serializers.IntegerField(min_value=1, max_value=99, default=1)
     note = serializers.CharField(max_length=120, required=False, allow_blank=True, default='')
 
-    def validate_variant(self, variant):
-        if not variant.is_available or not variant.item.is_available:
-            raise serializers.ValidationError(f'{variant.item.name} is currently out of stock.')
-        return variant
+    def validate(self, attrs):
+        variant = attrs.get('variant')
+        custom_name = (attrs.get('custom_name') or '').strip()
+        unit_price = attrs.get('unit_price')
+
+        if not variant and not custom_name:
+            raise serializers.ValidationError('Either a menu variant or custom item name is required.')
+
+        if not variant and unit_price is None:
+            raise serializers.ValidationError('Price is required for custom items.')
+
+        if variant:
+            if not variant.is_available or not variant.item.is_available:
+                raise serializers.ValidationError(f'{variant.item.name} is currently out of stock.')
+
+        return attrs
 
 
 class KOTItemSerializer(serializers.ModelSerializer):

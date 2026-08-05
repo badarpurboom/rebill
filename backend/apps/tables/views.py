@@ -99,3 +99,36 @@ class TableViewSet(viewsets.ModelViewSet):
         for row in RestaurantTable.objects.values('status'):
             counts[row['status']] = counts.get(row['status'], 0) + 1
         return Response({'total': sum(counts.values()), **counts})
+
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def transfer(self, request, pk=None):
+        """Transfer an active order from this table to an empty target table."""
+        source_table = self.get_object()
+        target_id = request.data.get('target_table_id')
+
+        if not target_id:
+            raise ValidationError({'detail': 'target_table_id is required.'})
+
+        try:
+            # Fresh DB fetch — don't use prefetch cache for status check
+            target_table = RestaurantTable.objects.select_for_update().get(id=target_id, is_active=True)
+        except RestaurantTable.DoesNotExist:
+            raise ValidationError({'detail': 'Target table not found or inactive.'})
+
+        if target_table.status != 'AVAILABLE':
+            raise ValidationError({'detail': f'Table {target_table.number} is not available (status: {target_table.status}).'})
+
+        open_orders = source_table.orders.filter(status__in=OPEN_STATUSES)
+        if not open_orders.exists():
+            raise ValidationError({'detail': 'No active order on this table.'})
+
+        # Transfer ALL open orders to new table
+        open_orders.update(table=target_table)
+
+        # Swap statuses
+        target_table.mark(source_table.status)
+        source_table.mark(TableStatus.AVAILABLE)
+
+        return Response({'detail': f'Transferred to Table {target_table.number}'})
+

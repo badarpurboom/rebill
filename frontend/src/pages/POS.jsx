@@ -13,10 +13,12 @@ import OwnerAuthModal from '@/components/pos/OwnerAuthModal'
 import PaymentModal from '@/components/pos/PaymentModal'
 import CustomerPickerModal from '@/components/customers/CustomerPickerModal'
 import QuickCustomerModal from '@/components/customers/QuickCustomerModal'
+import CustomItemModal from '@/components/pos/CustomItemModal'
 import TableHoverTooltip from '@/components/tables/TableHoverTooltip'
 import PrintSlipModal from '@/components/print/PrintSlipModal'
 import ThermalKOT from '@/components/print/ThermalKOT'
 import ThermalBill from '@/components/print/ThermalBill'
+import VoidOrderModal from '@/components/tables/VoidOrderModal'
 import {
   IconPos,
   IconTables,
@@ -51,6 +53,11 @@ export default function POS() {
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false)
   const [ownerAuth, setOwnerAuth] = useState(null)
   const [pickingCustomer, setPickingCustomer] = useState(false)
+  const [customItemModalOpen, setCustomItemModalOpen] = useState(false)
+  const [voidingOrder, setVoidingOrder] = useState(null)
+  const [payingOrder, setPayingOrder] = useState(null)
+  const [pendingPayOrder, setPendingPayOrder] = useState(null)
+  const [quickCustomerOpen, setQuickCustomerOpen] = useState(false)
 
   // Fetch menu, settings and active open takeaway orders
   useEffect(() => {
@@ -148,6 +155,17 @@ export default function POS() {
     }
   }
 
+  const addCustomItem = async (payload) => {
+    try {
+      await orderApi.addItem(order.id, payload)
+      await refreshOrder()
+      toast.success(`Added "${payload.custom_name}" to order!`)
+    } catch (error) {
+      toast.error(errorMessage(error, 'Failed to add custom item.'))
+      throw error
+    }
+  }
+
   const changeQuantity = async (line, quantity) => {
     setBusyItemId(line.id)
     try {
@@ -193,40 +211,32 @@ export default function POS() {
   const onGenerateBill = () => {
     // Generate a proforma bill object for ThermalSlip
     const proforma = {
-      restaurant_name: 'PROFORMA INVOICE', // Usually comes from settings
-      restaurant_address: '',
-      gstin: '',
+      restaurant_name: settings?.restaurant_name || 'PROFORMA INVOICE',
+      restaurant_address: settings?.address || '',
+      gstin: settings?.gstin || '',
       bill_number: 'PROFORMA',
-      table_number: order?.table_number,
+      table_number: order?.table_number || 'Takeaway',
       created_at: new Date().toISOString(),
       created_by_name: order?.created_by_name || 'Staff',
       customer_name: order?.customer_name,
       customer_phone: order?.customer_phone,
-      items: order?.items?.map(i => ({
-        variant_name: i.variant_name,
-        quantity: i.quantity,
-        price: i.price,
-        amount: Number(i.price) * Number(i.quantity)
-      })) || [],
-      subtotal: totals?.subtotal || 0,
-      discount_percent: '0',
-      discount_amount: '0',
+      items: order?.items || [],
+      subtotal: totals?.subtotal || '0.00',
+      discount_percent: discount || '0',
+      discount_amount: totals?.discount_amount || '0.00',
+      taxable_amount: totals?.taxable_amount || totals?.subtotal || '0.00',
       cgst_percent: totals?.cgst_percent || '0',
-      cgst_amount: totals?.cgst_amount || '0',
+      cgst_amount: totals?.cgst_amount || '0.00',
       sgst_percent: totals?.sgst_percent || '0',
-      sgst_amount: totals?.sgst_amount || '0',
-      total: totals?.total || 0,
-      points_redeemed: 0,
-      redeem_amount: '0',
-      net_payable: totals?.total || 0,
+      sgst_amount: totals?.sgst_amount || '0.00',
+      total: totals?.total || '0.00',
+      points_redeemed: redeemPoints || 0,
+      redeem_amount: totals?.redeem_amount || '0.00',
+      net_payable: totals?.net_payable || totals?.total || '0.00',
       status: 'UNPAID',
     }
     
-    if (order?.order_type === 'TAKEAWAY') {
-      setCheckoutModalOpen(true)
-    } else {
-      setBill(proforma)
-    }
+    setBill(proforma)
   }
 
   const finishTable = () => {
@@ -235,6 +245,60 @@ export default function POS() {
     setDiscount('')
     setRedeemPoints(0)
     navigate('/tables')
+  }
+
+  const handleVoidOrder = async (targetOrder) => {
+    try {
+      await orderApi.void(targetOrder.id)
+      const label = targetOrder.order_type === 'TAKEAWAY' ? `Parcel #TK-${targetOrder.id}` : `Table ${targetOrder.table_number || targetOrder.number}`
+      toast.success(`${label} order cancelled!`)
+      setVoidingOrder(null)
+      if (order?.id === targetOrder.id) {
+        setOrder(null)
+        setParams({})
+      }
+      refreshLauncherData()
+      refreshOrder()
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to cancel order.'))
+    }
+  }
+
+  const initiatePayOrder = async (targetOrder) => {
+    try {
+      const fullOrder = targetOrder.items ? targetOrder : await orderApi.get(targetOrder.id)
+      
+      // If customer is ALREADY attached to this order, jump straight to PaymentModal
+      if (fullOrder.customer || fullOrder.customer_detail) {
+        setPayingOrder(fullOrder)
+      } else {
+        // Open QuickCustomerModal first
+        setPendingPayOrder(fullOrder)
+        setQuickCustomerOpen(true)
+      }
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to fetch order details.'))
+    }
+  }
+
+  const handleQuickCustomerSave = async (savedCustomer) => {
+    if (!pendingPayOrder) return
+    try {
+      const updatedOrder = await orderApi.setCustomer(pendingPayOrder.id, savedCustomer.id)
+      setQuickCustomerOpen(false)
+      setPendingPayOrder(null)
+      setPayingOrder(updatedOrder)
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to attach customer to order.'))
+    }
+  }
+
+  const handleQuickCustomerSkip = () => {
+    if (!pendingPayOrder) return
+    const target = pendingPayOrder
+    setQuickCustomerOpen(false)
+    setPendingPayOrder(null)
+    setPayingOrder(target)
   }
 
   const startTakeaway = async () => {
@@ -248,14 +312,58 @@ export default function POS() {
     }
   }
 
+  const [launcherRefreshKey, setLauncherRefreshKey] = useState(0)
+  const refreshLauncherData = () => setLauncherRefreshKey((k) => k + 1)
+
   if (loading) return <PageLoader label="Loading Lumière POS Terminal…" />
   if (!tableId && !orderIdParam && !order) {
     return (
-      <POSStartScreen
-        onPickTable={(id) => setParams({ table: String(id) })}
-        onPickOrder={(id) => setParams({ order: String(id) })}
-        onTakeaway={startTakeaway}
-      />
+      <div className="flex flex-1 min-h-0 flex-col bg-[#fafaf9] p-4 sm:p-6 overflow-y-auto">
+        <POSStartScreen
+          key={launcherRefreshKey}
+          onPickTable={(id) => setParams({ table: String(id) })}
+          onPickOrder={(id) => setParams({ order: String(id) })}
+          onTakeaway={startTakeaway}
+          onPayTakeaway={(t) => initiatePayOrder(t)}
+          onVoidTakeaway={(t) => setVoidingOrder(t)}
+        />
+
+        {voidingOrder && (
+          <VoidOrderModal
+            order={voidingOrder}
+            onClose={() => setVoidingOrder(null)}
+            onConfirm={handleVoidOrder}
+          />
+        )}
+
+        {payingOrder && (
+          <PaymentModal
+            order={payingOrder}
+            onClose={() => {
+              setPayingOrder(null)
+              refreshLauncherData()
+            }}
+            onPaid={() => {
+              setPayingOrder(null)
+              refreshLauncherData()
+            }}
+          />
+        )}
+
+        {quickCustomerOpen && (
+          <QuickCustomerModal
+            open={quickCustomerOpen}
+            minRedeemPoints={0}
+            maxRedeemable={0}
+            onClose={() => {
+              setQuickCustomerOpen(false)
+              setPendingPayOrder(null)
+            }}
+            onSaveAndProceed={handleQuickCustomerSave}
+            onSkipAndProceed={handleQuickCustomerSkip}
+          />
+        )}
+      </div>
     )
   }
 
@@ -322,6 +430,18 @@ export default function POS() {
             )}
           </button>
 
+          <button
+            onClick={() => setVoidingOrder(order)}
+            disabled={!order || order.status !== 'RUNNING'}
+            className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-40 active:scale-95 shadow-2xs"
+            title="Cancel / Void this order"
+          >
+            <svg className="size-4 text-rose-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>Void Order</span>
+          </button>
+
           <div className="text-right">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Running Total</span>
             <span className="tabular text-base font-black text-slate-900">{money(order?.subtotal ?? 0)}</span>
@@ -347,17 +467,13 @@ export default function POS() {
           <CartPanel
             order={order}
             totals={totals}
-            discount={discount}
-            maxDiscount={settings?.max_discount_percent ?? 0}
-            needsApproval={needsApproval}
-            redeemPoints={redeemPoints}
-            onRedeemChange={setRedeemPoints}
             busyItemId={busyItemId}
             onQuantity={changeQuantity}
             onRemove={removeItem}
-            onDiscountChange={setDiscount}
             onSendKot={sendKot}
             onGenerateBill={onGenerateBill}
+            onPayBill={() => initiatePayOrder(order)}
+            onAddCustomItem={() => setCustomItemModalOpen(true)}
             sendingKot={sendingKot}
             generating={generating}
           />
@@ -397,6 +513,50 @@ export default function POS() {
           order={order}
           onClose={() => setCheckoutModalOpen(false)}
           onPaid={finishTable}
+        />
+      )}
+      
+      {customItemModalOpen && (
+        <CustomItemModal
+          open={customItemModalOpen}
+          onClose={() => setCustomItemModalOpen(false)}
+          onAdd={addCustomItem}
+        />
+      )}
+
+      {voidingOrder && (
+        <VoidOrderModal
+          order={voidingOrder}
+          onClose={() => setVoidingOrder(null)}
+          onConfirm={handleVoidOrder}
+        />
+      )}
+
+      {payingOrder && (
+        <PaymentModal
+          order={payingOrder}
+          onClose={() => {
+            setPayingOrder(null)
+            refreshOrder()
+          }}
+          onPaid={() => {
+            setPayingOrder(null)
+            finishTable()
+          }}
+        />
+      )}
+
+      {quickCustomerOpen && (
+        <QuickCustomerModal
+          open={quickCustomerOpen}
+          minRedeemPoints={0}
+          maxRedeemable={0}
+          onClose={() => {
+            setQuickCustomerOpen(false)
+            setPendingPayOrder(null)
+          }}
+          onSaveAndProceed={handleQuickCustomerSave}
+          onSkipAndProceed={handleQuickCustomerSkip}
         />
       )}
 
@@ -454,7 +614,7 @@ export default function POS() {
 }
 
 /** Pixel-Perfect Stitch Lumière POS Start Billing Launcher Screen */
-function POSStartScreen({ onPickTable, onPickOrder, onTakeaway }) {
+function POSStartScreen({ onPickTable, onPickOrder, onTakeaway, onPayTakeaway, onVoidTakeaway }) {
   const [rows, setRows] = useState(null)
   const [openOrders, setOpenOrders] = useState([])
   const navigate = useNavigate()
@@ -605,9 +765,13 @@ function POSStartScreen({ onPickTable, onPickOrder, onTakeaway }) {
                       </span>
                     </div>
 
-                    {/* Customer Name + Status */}
-                    <div className="mt-2.5">
-                      <h3 className="text-sm font-black text-slate-900 truncate">
+                    {/* Customer Name + Status (Click to view/edit order in POS) */}
+                    <div
+                      className="mt-2.5 cursor-pointer"
+                      onClick={() => onPickOrder(takeaway.id)}
+                      title="Click to view/add items in POS"
+                    >
+                      <h3 className="text-sm font-black text-slate-900 truncate hover:text-rose-600 transition-colors">
                         {takeaway.customer_detail?.name || 'Parcel Customer'}
                       </h3>
                       <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
@@ -616,17 +780,24 @@ function POSStartScreen({ onPickTable, onPickOrder, onTakeaway }) {
                     </div>
                   </div>
 
-                  {/* Primary Action Button */}
-                  <button
-                    onClick={() => onPickOrder(takeaway.id)}
-                    className={`mt-4 w-full rounded-xl py-2 text-xs font-black transition active:scale-95 ${
-                      isFirst
-                        ? 'bg-[#c80036] text-white shadow-md shadow-rose-600/20 hover:bg-[#b0002f]'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/70'
-                    }`}
-                  >
-                    Open Parcel Bill
-                  </button>
+                  {/* Primary Action Buttons */}
+                  <div className="mt-4 flex gap-1.5">
+                    <button
+                      onClick={() => onPayTakeaway?.(takeaway)}
+                      className="flex-1 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 py-2 text-xs font-black shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                    >
+                      Pay Bill
+                    </button>
+                    <button
+                      onClick={() => onVoidTakeaway?.(takeaway)}
+                      title="Cancel / Void Takeaway Parcel"
+                      className="px-2.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl shadow-2xs hover:bg-rose-100 active:scale-95 transition-all flex items-center justify-center"
+                    >
+                      <svg className="size-4 text-rose-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1 1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               )
             })}

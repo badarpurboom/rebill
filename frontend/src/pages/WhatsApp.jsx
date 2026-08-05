@@ -26,8 +26,14 @@ export default function WhatsApp() {
   // Campaigns State
   const [segmentCounts, setSegmentCounts] = useState({})
   const [campaigns, setCampaigns] = useState([])
-  const [newCampaign, setNewCampaign] = useState({ name: '', segment: 'ALL', body: '' })
+  const [newCampaign, setNewCampaign] = useState({ name: '', segment: 'ALL', template: '', scheduled_at: '' })
   const [creatingCampaign, setCreatingCampaign] = useState(false)
+
+  // Auto Campaigns State
+  const [autoRules, setAutoRules] = useState([])
+  const [loadingAutoRules, setLoadingAutoRules] = useState(false)
+  const [newAutoRule, setNewAutoRule] = useState({ name: '', trigger_event: 'DAYS_SINCE_LAST_VISIT', target_days: 30, template: '' })
+  const [creatingAutoRule, setCreatingAutoRule] = useState(false)
 
   useEffect(() => {
     fetchConfig()
@@ -82,6 +88,10 @@ export default function WhatsApp() {
       fetchTriggersAndTemplates()
     } else if (activeTab === 'campaigns') {
       fetchCampaignData()
+      if (templates.length === 0) fetchTriggersAndTemplates()
+    } else if (activeTab === 'auto') {
+      fetchAutoRules()
+      if (templates.length === 0) fetchTriggersAndTemplates()
     }
   }, [activeTab, simPhone])
 
@@ -128,19 +138,30 @@ export default function WhatsApp() {
 
   const handleCreateCampaign = (e) => {
     e.preventDefault()
-    if (!newCampaign.name || !newCampaign.body) {
-      toast.error('Campaign name and message body are required.')
-      return
-    }
+    if (!newCampaign.name) return toast.error('Campaign name is required')
+    if (!newCampaign.template) return toast.error('An Approved Template is required')
+
     setCreatingCampaign(true)
+    const payload = { ...newCampaign }
+    if (!payload.scheduled_at) delete payload.scheduled_at
+
     whatsappService
-      .createCampaign(newCampaign)
-      .then(() => {
-        toast.success('Campaign draft created successfully!')
-        setNewCampaign({ name: '', segment: 'ALL', body: '' })
+      .createCampaign(payload)
+      .then((data) => {
+        toast.success(payload.scheduled_at ? 'Campaign scheduled successfully!' : 'Campaign created as draft!')
+        setNewCampaign({ name: '', segment: 'ALL', template: '', scheduled_at: '' })
         fetchCampaignData()
+        if (!payload.scheduled_at) {
+          // Auto-send if not scheduled
+          whatsappService.sendCampaign(data.id)
+            .then(() => {
+              toast.success('Campaign dispatched!')
+              fetchCampaignData()
+            })
+            .catch(() => toast.error('Campaign created but failed to send.'))
+        }
       })
-      .catch((err) => toast.error(err.response?.data?.detail || 'Campaign creation error'))
+      .catch((err) => toast.error(err.response?.data?.detail || 'Campaign creation failed'))
       .finally(() => setCreatingCampaign(false))
   }
 
@@ -153,6 +174,54 @@ export default function WhatsApp() {
         fetchCampaignData()
       })
       .catch((err) => toast.error(err.response?.data?.detail || 'Campaign send error'))
+  }
+
+  const fetchAutoRules = () => {
+    setLoadingAutoRules(true)
+    whatsappService
+      .getAutoCampaignRules()
+      .then((data) => setAutoRules(data.results || data))
+      .catch(() => toast.error('Failed to load auto rules.'))
+      .finally(() => setLoadingAutoRules(false))
+  }
+
+  const handleCreateAutoRule = (e) => {
+    e.preventDefault()
+    if (!newAutoRule.name || !newAutoRule.target_days || !newAutoRule.template) {
+      toast.error('Name, Target Days, and Template are required.')
+      return
+    }
+    setCreatingAutoRule(true)
+    whatsappService
+      .createAutoCampaignRule(newAutoRule)
+      .then(() => {
+        toast.success('Auto Trigger created successfully!')
+        setNewAutoRule({ name: '', trigger_event: 'DAYS_SINCE_LAST_VISIT', target_days: 30, template: '' })
+        fetchAutoRules()
+      })
+      .catch((err) => toast.error(err.response?.data?.detail || 'Creation error'))
+      .finally(() => setCreatingAutoRule(false))
+  }
+
+  const handleToggleAutoRule = (ruleId, currentStatus) => {
+    whatsappService
+      .updateAutoCampaignRule(ruleId, { is_active: !currentStatus })
+      .then(() => {
+        toast.success('Trigger status updated!')
+        fetchAutoRules()
+      })
+      .catch(() => toast.error('Failed to update status.'))
+  }
+
+  const handleDeleteAutoRule = (ruleId) => {
+    if (!window.confirm('Are you sure you want to delete this auto trigger?')) return
+    whatsappService
+      .deleteAutoCampaignRule(ruleId)
+      .then(() => {
+        toast.success('Trigger deleted successfully!')
+        fetchAutoRules()
+      })
+      .catch(() => toast.error('Failed to delete trigger.'))
   }
 
   if (loadingConfig) {
@@ -203,6 +272,9 @@ export default function WhatsApp() {
         </TabButton>
         <TabButton active={activeTab === 'campaigns'} onClick={() => setActiveTab('campaigns')}>
           📢 Broadcast Campaigns
+        </TabButton>
+        <TabButton active={activeTab === 'auto'} onClick={() => setActiveTab('auto')}>
+          🤖 Auto Triggers
         </TabButton>
         <TabButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
           ⚙️ Meta API Config
@@ -435,22 +507,39 @@ export default function WhatsApp() {
                   onChange={(e) => setNewCampaign({ ...newCampaign, segment: e.target.value })}
                   className="w-full rounded-2xl border border-slate-200 p-2.5 text-xs font-semibold outline-none focus:border-emerald-500"
                 >
-                  <option value="ALL">All Customers ({segmentCounts.ALL || 0})</option>
-                  <option value="NEW">New Customers ({segmentCounts.NEW || 0})</option>
-                  <option value="REGULAR">Regular Customers ({segmentCounts.REGULAR || 0})</option>
-                  <option value="INACTIVE">Inactive Customers ({segmentCounts.INACTIVE || 0})</option>
+                  <option value="ALL">All Customers (Valid Numbers)</option>
+                  <option value="NEW">New Customers (1 Visit)</option>
+                  <option value="REGULAR">Regular Customers (Frequent)</option>
+                  <option value="INACTIVE">Inactive (Needs Win-Back)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Message Body (Hindi)</label>
-                <textarea
-                  rows="4"
-                  value={newCampaign.body}
-                  onChange={(e) => setNewCampaign({ ...newCampaign, body: e.target.value })}
-                  placeholder="Namaste {name} 🙏 Aaj hi restaurant aayein aur 15% discount paayein..."
-                  className="w-full rounded-2xl border border-slate-200 p-2.5 text-xs outline-none focus:border-emerald-500"
-                ></textarea>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Approved Template</label>
+                <select
+                  value={newCampaign.template}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, template: e.target.value })}
+                  className="w-full rounded-2xl border border-slate-200 p-2.5 text-xs font-semibold outline-none focus:border-emerald-500"
+                >
+                  <option value="">-- Select Approved Template --</option>
+                  {templates.map((tmpl) => (
+                    <option key={tmpl.id} value={tmpl.id}>
+                      {tmpl.name} ({tmpl.status})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">All broadcasts must use a pre-approved template.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Schedule For (Optional)</label>
+                <input
+                  type="datetime-local"
+                  value={newCampaign.scheduled_at}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, scheduled_at: e.target.value })}
+                  className="w-full rounded-2xl border border-slate-200 p-2.5 text-xs font-semibold outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Leave blank to send immediately.</p>
               </div>
 
               <button
@@ -458,7 +547,7 @@ export default function WhatsApp() {
                 disabled={creatingCampaign}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-2xl text-xs transition shadow-md shadow-emerald-600/20"
               >
-                {creatingCampaign ? 'Creating...' : 'Save Campaign Draft'}
+                {creatingCampaign ? 'Processing...' : newCampaign.scheduled_at ? '🗓️ Schedule Campaign' : '🚀 Send Now'}
               </button>
             </form>
           </div>
@@ -471,22 +560,25 @@ export default function WhatsApp() {
             ) : (
               <div className="space-y-4">
                 {campaigns.map((camp) => (
-                  <div key={camp.id} className="p-4 rounded-2xl border border-slate-200 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-bold text-slate-900 text-base">{camp.name}</h4>
-                      <span
-                        className={`text-xs px-3 py-1 rounded-full font-bold ${
-                          camp.status === 'SENT'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {camp.status_display}
+                  <div key={camp.id} className="p-4 rounded-2xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-900 text-sm">{camp.name}</h4>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          camp.status === 'SENT' ? 'bg-emerald-100 text-emerald-800' :
+                          camp.status === 'SCHED' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {camp.status_display || camp.status}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-400 font-bold">
+                        {camp.scheduled_at && camp.status === 'SCHED' ? `Scheduled: ${new Date(camp.scheduled_at).toLocaleString('en-IN')}` :
+                         camp.sent_at ? new Date(camp.sent_at).toLocaleString('en-IN') : 'Not sent'}
                       </span>
                     </div>
 
-                    <p className="text-xs bg-slate-50 p-3 rounded-xl border border-slate-100 text-slate-800 font-mono whitespace-pre-wrap">
-                      {camp.body}
+                    <p className="text-xs text-slate-500 mb-2 truncate">
+                      <span className="bg-slate-100 px-1 rounded text-slate-700 font-mono text-[10px] mr-1">TPL: {camp.template_name || 'No Template'}</span>
                     </p>
 
                     {camp.status !== 'SENT' && (
@@ -497,6 +589,124 @@ export default function WhatsApp() {
                         🚀 Run Broadcast Now
                       </button>
                     )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: AUTO TRIGGERS */}
+      {activeTab === 'auto' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-3xl shadow-xs border border-slate-200/80 space-y-6">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 mb-2">Create Auto Trigger</h2>
+              <p className="text-xs text-slate-400">Set rules to automatically send WhatsApp messages based on customer activity.</p>
+            </div>
+
+            <form onSubmit={handleCreateAutoRule} className="space-y-4 pt-2 border-t border-slate-100">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Rule Name</label>
+                <input
+                  type="text"
+                  value={newAutoRule.name}
+                  onChange={(e) => setNewAutoRule({ ...newAutoRule, name: e.target.value })}
+                  placeholder="e.g. 30 Days Win-Back"
+                  className="w-full rounded-2xl border border-slate-200 p-2.5 text-xs font-semibold outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Trigger Condition</label>
+                <select
+                  value={newAutoRule.trigger_event}
+                  onChange={(e) => setNewAutoRule({ ...newAutoRule, trigger_event: e.target.value })}
+                  className="w-full rounded-2xl border border-slate-200 p-2.5 text-xs font-semibold outline-none focus:border-emerald-500 bg-slate-50"
+                  disabled
+                >
+                  <option value="DAYS_SINCE_LAST_VISIT">Days since last visit</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Target Days</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={newAutoRule.target_days}
+                  onChange={(e) => setNewAutoRule({ ...newAutoRule, target_days: e.target.value })}
+                  placeholder="30"
+                  className="w-full rounded-2xl border border-slate-200 p-2.5 text-xs font-semibold outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Template</label>
+                <select
+                  value={newAutoRule.template}
+                  onChange={(e) => setNewAutoRule({ ...newAutoRule, template: e.target.value })}
+                  className="w-full rounded-2xl border border-slate-200 p-2.5 text-xs font-semibold outline-none focus:border-emerald-500"
+                >
+                  <option value="">-- Select Template --</option>
+                  {templates.map((tmpl) => (
+                    <option key={tmpl.id} value={tmpl.id}>
+                      {tmpl.name} ({tmpl.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                disabled={creatingAutoRule}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-2xl text-xs transition shadow-md shadow-emerald-600/20"
+              >
+                {creatingAutoRule ? 'Creating...' : '+ Create Rule'}
+              </button>
+            </form>
+          </div>
+
+          <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-xs border border-slate-200/80">
+            <h2 className="text-lg font-bold text-slate-900 mb-4">Active Rules</h2>
+            {loadingAutoRules ? (
+              <p className="text-slate-400 text-xs py-12 text-center">Loading rules...</p>
+            ) : autoRules.length === 0 ? (
+              <p className="text-slate-400 text-xs py-12 text-center">No auto-triggers configured.</p>
+            ) : (
+              <div className="space-y-4">
+                {autoRules.map((rule) => (
+                  <div key={rule.id} className="p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition hover:border-emerald-200">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-bold text-slate-900 text-base">{rule.name}</h4>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${rule.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
+                          {rule.is_active ? 'ON' : 'OFF'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium">
+                        If <span className="font-bold text-slate-700">{rule.trigger_event_display}</span> is <span className="font-bold text-slate-700">{rule.target_days} days</span>
+                      </p>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        Send Template: <span className="font-mono text-emerald-700 bg-emerald-50 px-1 rounded">{rule.template_name}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleToggleAutoRule(rule.id, rule.is_active)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition ${rule.is_active ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+                      >
+                        Turn {rule.is_active ? 'OFF' : 'ON'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAutoRule(rule.id)}
+                        className="px-3 py-2 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

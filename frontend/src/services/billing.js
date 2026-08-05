@@ -30,6 +30,8 @@ export const orders = {
 
   generateBill: (orderId, payload) =>
     api.post(`/billing/orders/${orderId}/generate-bill/`, payload).then((r) => r.data),
+  void: (orderId) =>
+    api.post(`/billing/orders/${orderId}/void/`).then((r) => r.data),
 }
 
 export const bills = {

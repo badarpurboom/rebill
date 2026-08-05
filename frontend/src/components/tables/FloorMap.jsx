@@ -29,7 +29,7 @@ const STATUS_CFG = {
 }
 
 /* ─── Card View (Normal Mode — matches Stitch design) ──────────────── */
-function TableCard({ table, onClick, onPayClick }) {
+function TableCard({ table, onClick, onPayClick, onTransferClick, onVoidClick }) {
   const cfg = STATUS_CFG[table.status] ?? STATUS_CFG.AVAILABLE
   const num = String(table.number).padStart(2, '0')
   const bill = table.running_total
@@ -98,15 +98,39 @@ function TableCard({ table, onClick, onPayClick }) {
         </div>
 
         {(table.status === 'BILLED' || table.status === 'OCCUPIED') && (
-          <div className="mt-3">
+          <div className="mt-3 flex gap-2">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onPayClick?.(e, table);
               }}
-              className="w-full bg-rose-600 text-white rounded-lg py-1.5 text-xs font-bold shadow-md hover:bg-rose-700 active:scale-95 transition-all"
+              className="flex-1 bg-rose-600 text-white rounded-lg py-1.5 text-xs font-bold shadow-md hover:bg-rose-700 active:scale-95 transition-all"
             >
               Pay Bill
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onTransferClick?.(e, table);
+              }}
+              title="Transfer Table"
+              className="px-2 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg shadow-sm hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center"
+            >
+              <svg className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onVoidClick?.(e, table);
+              }}
+              title="Cancel / Clear Table Order"
+              className="px-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg shadow-sm hover:bg-rose-100 active:scale-95 transition-all flex items-center justify-center"
+            >
+              <svg className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
             </button>
           </div>
         )}
@@ -227,7 +251,7 @@ function CanvasMode({ tables, selectedId, onTableClick, onLayoutChange }) {
 }
 
 /* ─── Main FloorMap Component ──────────────────────────────────────── */
-export default function FloorMap({ tables, editing = false, selectedId = null, onTableClick, onLayoutChange, onPayClick }) {
+export default function FloorMap({ tables, editing = false, selectedId = null, onTableClick, onLayoutChange, onPayClick, onTransferClick, onVoidClick }) {
   if (editing) {
     return (
       <CanvasMode
@@ -242,7 +266,7 @@ export default function FloorMap({ tables, editing = false, selectedId = null, o
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
       {tables.map((table) => (
-        <TableCard key={table.id} table={table} onClick={onTableClick} onPayClick={onPayClick} />
+        <TableCard key={table.id} table={table} onClick={onTableClick} onPayClick={onPayClick} onTransferClick={onTransferClick} onVoidClick={onVoidClick} />
       ))}
     </div>
   )

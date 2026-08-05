@@ -58,4 +58,20 @@ export const whatsappService = {
   submitPublicFeedback(token, data) {
     return api.post(`/whatsapp/feedback/${token}/submit/`, data).then((res) => res.data)
   },
+
+  getAutoCampaignRules() {
+    return api.get('/whatsapp/auto-campaign-rules/').then((res) => res.data)
+  },
+
+  createAutoCampaignRule(data) {
+    return api.post('/whatsapp/auto-campaign-rules/', data).then((res) => res.data)
+  },
+
+  updateAutoCampaignRule(id, data) {
+    return api.patch(`/whatsapp/auto-campaign-rules/${id}/`, data).then((res) => res.data)
+  },
+
+  deleteAutoCampaignRule(id) {
+    return api.delete(`/whatsapp/auto-campaign-rules/${id}/`).then((res) => res.data)
+  },
 }

@@ -10,6 +10,8 @@ import Button from '@/components/ui/Button'
 import { EmptyState, PageLoader } from '@/components/ui/Misc'
 import FloorMap, { FloorLegend } from '@/components/tables/FloorMap'
 import TableFormModal from '@/components/tables/TableFormModal'
+import TransferModal from '@/components/tables/TransferModal'
+import VoidOrderModal from '@/components/tables/VoidOrderModal'
 import PaymentModal from '@/components/pos/PaymentModal'
 import QuickCustomerModal from '@/components/customers/QuickCustomerModal'
 
@@ -42,6 +44,8 @@ export default function Tables() {
   const [quickCustomerOpen, setQuickCustomerOpen] = useState(false)
   const [pendingOrder, setPendingOrder] = useState(null)
   const [startingTakeaway, setStartingTakeaway] = useState(false)
+  const [transferringTable, setTransferringTable] = useState(null)
+  const [voidingTable, setVoidingTable] = useState(null)
 
   /* Load */
   const load = useCallback(async () => {
@@ -147,6 +151,46 @@ export default function Tables() {
       toast.error(errorMessage(err, 'Failed to fetch order.'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleTransferClick = (e, table) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setTransferringTable(table)
+  }
+
+  const handleTransferSubmit = async (sourceId, targetId) => {
+    try {
+      const res = await tableApi.transfer(sourceId, targetId)
+      toast.success(res?.detail ?? 'Table transferred successfully!')
+      setTransferringTable(null)
+      await load() // Refresh tables before closing so UI is fresh
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to transfer table.'))
+      // Refresh even on error — the target table may have changed status
+      load()
+    }
+  }
+
+  const handleVoidClick = (e, table) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!table.open_order_id) {
+      toast.error(`Table ${table.number} has no active order.`)
+      return
+    }
+    setVoidingTable(table)
+  }
+
+  const handleVoidConfirm = async (table) => {
+    try {
+      await orderApi.void(table.open_order_id)
+      toast.success(`Table ${table.number} order cancelled and table is now available.`)
+      setVoidingTable(null)
+      await load()
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to cancel order.'))
     }
   }
 
@@ -293,6 +337,8 @@ export default function Tables() {
           onTableClick={openTable}
           onLayoutChange={moveTable}
           onPayClick={handlePayClick}
+          onTransferClick={handleTransferClick}
+          onVoidClick={handleVoidClick}
         />
       )}
 
@@ -338,6 +384,19 @@ export default function Tables() {
           }}
         />
       )}
+
+      <TransferModal 
+        tables={rows}
+        sourceTable={transferringTable}
+        onClose={() => setTransferringTable(null)}
+        onTransfer={handleTransferSubmit}
+      />
+
+      <VoidOrderModal
+        table={voidingTable}
+        onClose={() => setVoidingTable(null)}
+        onConfirm={handleVoidConfirm}
+      />
 
       {payingOrder && (
         <PaymentModal

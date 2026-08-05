@@ -12,6 +12,9 @@ export const tables = {
     api.post('/tables/save_layout/', { tables: positions }).then((r) => r.data),
 
   bulkCreate: (payload) => api.post('/tables/bulk_create/', payload).then((r) => r.data),
+
+  transfer: (id, target_table_id) => 
+    api.post(`/tables/${id}/transfer/`, { target_table_id }).then((r) => r.data),
 }
 
 export const TABLE_STATUS = {
