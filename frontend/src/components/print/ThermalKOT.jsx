@@ -46,6 +46,7 @@ const ThermalKOT = forwardRef(function ThermalKOT({ kot }, ref) {
               <td className="pb-1.5">
                 <span className="font-bold">{line.item_name}</span>
                 {line.portion === 'HALF' && <span className="ml-1">(Half)</span>}
+                {line.portion === 'FULL' && <span className="ml-1">(Full)</span>}
                 {line.note && <div className="text-[11px] italic">↳ {line.note}</div>}
               </td>
             </tr>

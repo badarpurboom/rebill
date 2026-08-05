@@ -203,6 +203,9 @@ function KOTCard({ kot, onPrint }) {
               {line.portion === 'HALF' && (
                 <span className="ml-1.5 rounded bg-slate-100 px-1 py-0.5 text-[9px] font-black uppercase text-slate-500">Half</span>
               )}
+              {line.portion === 'FULL' && (
+                <span className="ml-1.5 rounded bg-slate-100 px-1 py-0.5 text-[9px] font-black uppercase text-slate-500">Full</span>
+              )}
               {line.note && (
                 <span className="mt-0.5 block text-xs text-amber-700 italic">
                   ↳ {line.note}
