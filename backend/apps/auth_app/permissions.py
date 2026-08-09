@@ -5,6 +5,25 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission
 from .models import Role
 
 
+def has_perm(user, perm):
+    if not user or not user.is_authenticated:
+        return False
+    return user.has_perm_dynamic(perm)
+
+
+class HasDynamicPermission(BasePermission):
+    """Factory to create permission classes on the fly based on a specific permission."""
+    def __init__(self, perm_name, fallback_message="Access denied."):
+        self.perm_name = perm_name
+        self.message = fallback_message
+
+    def __call__(self):
+        return self
+
+    def has_permission(self, request, view):
+        return has_perm(request.user, self.perm_name)
+
+
 class IsOwner(BasePermission):
     """Owner only — reports, settings, menu editing, user management."""
 
@@ -12,11 +31,11 @@ class IsOwner(BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(user and user.is_authenticated and user.role == Role.OWNER)
+        return bool(user and user.is_authenticated and user.is_owner)
 
 
 class IsOwnerOrCashier(BasePermission):
-    """Everything on the billing floor: POS, customers, checkout, coupons."""
+    """Fallback for everything on the billing floor, until we migrate all views to granular perms."""
 
     message = 'Yeh action sirf Owner ya Cashier kar sakta hai.'
 
@@ -25,7 +44,7 @@ class IsOwnerOrCashier(BasePermission):
         return bool(
             user
             and user.is_authenticated
-            and user.role in (Role.OWNER, Role.CASHIER)
+            and (user.is_owner or user.is_cashier)
         )
 
 
@@ -44,4 +63,4 @@ class IsOwnerOrReadOnly(BasePermission):
             return False
         if request.method in SAFE_METHODS:
             return True
-        return user.role == Role.OWNER
+        return user.is_owner

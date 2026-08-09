@@ -30,3 +30,10 @@ export const users = {
   update: (id, payload) => api.patch(`/auth/users/${id}/`, payload).then((r) => r.data),
   remove: (id) => api.delete(`/auth/users/${id}/`),
 }
+
+export const roles = {
+  list: () => api.get('/auth/roles/').then((r) => r.data),
+  create: (payload) => api.post('/auth/roles/', payload).then((r) => r.data),
+  update: (id, payload) => api.patch(`/auth/roles/${id}/`, payload).then((r) => r.data),
+  remove: (id) => api.delete(`/auth/roles/${id}/`),
+}

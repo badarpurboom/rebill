@@ -18,9 +18,7 @@ import Tables from '@/pages/Tables'
 import Coupons from '@/pages/Coupons'
 import Feedback from '@/pages/Feedback'
 import WhatsApp from '@/pages/WhatsApp'
-import { ROLES } from '@/utils/roles'
-
-const { OWNER, CASHIER } = ROLES
+import { hasPermission } from '@/utils/roles'
 
 export default function App() {
   return (
@@ -31,32 +29,20 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/feedback/:token" element={<Feedback />} />
 
-            {/* Any signed-in staff member */}
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
-                <Route index element={<Dashboard />} />
-                <Route path="kot" element={<KOTScreen />} />
-              </Route>
-            </Route>
-
-            {/* Owner + Cashier — the billing floor */}
-            <Route element={<ProtectedRoute allow={[OWNER, CASHIER]} />}>
-              <Route element={<Layout />}>
-                <Route path="menu" element={<MenuManagement />} />
-                <Route path="pos" element={<POS />} />
-                <Route path="tables" element={<Tables />} />
-                <Route path="customers" element={<Customers />} />
-                <Route path="orders" element={<OrderHistory />} />
-              </Route>
-            </Route>
-
-            {/* Owner only */}
-            <Route element={<ProtectedRoute allow={[OWNER]} />}>
-              <Route element={<Layout />}>
-                <Route path="whatsapp" element={<WhatsApp />} />
-                <Route path="coupons" element={<Coupons />} />
-                <Route path="reports" element={<Reports />} />
-                <Route path="settings" element={<Settings />} />
+                {/* Each route guards itself or the Layout hides it if permission is missing, but ProtectedRoute can also check */}
+                <Route index element={<ProtectedRoute permission="view_dashboard"><Dashboard /></ProtectedRoute>} />
+                <Route path="kot" element={<ProtectedRoute permission="view_kot"><KOTScreen /></ProtectedRoute>} />
+                <Route path="menu" element={<ProtectedRoute permission="view_menu"><MenuManagement /></ProtectedRoute>} />
+                <Route path="pos" element={<ProtectedRoute permission="view_pos"><POS /></ProtectedRoute>} />
+                <Route path="tables" element={<ProtectedRoute permission="view_floor_map"><Tables /></ProtectedRoute>} />
+                <Route path="customers" element={<ProtectedRoute permission="view_customers"><Customers /></ProtectedRoute>} />
+                <Route path="orders" element={<ProtectedRoute permission="view_orders"><OrderHistory /></ProtectedRoute>} />
+                <Route path="whatsapp" element={<ProtectedRoute permission="view_whatsapp"><WhatsApp /></ProtectedRoute>} />
+                <Route path="coupons" element={<ProtectedRoute permission="view_coupons"><Coupons /></ProtectedRoute>} />
+                <Route path="reports" element={<ProtectedRoute permission="view_reports"><Reports /></ProtectedRoute>} />
+                <Route path="settings" element={<ProtectedRoute permission="view_settings"><Settings /></ProtectedRoute>} />
               </Route>
             </Route>
 

@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.auth_app.permissions import IsOwner, IsOwnerOrCashier
+from apps.auth_app.permissions import IsOwner, HasDynamicPermission
 from apps.customers.models import Customer
 
 from .models import (
@@ -110,7 +110,7 @@ class MessageHistoryView(generics.ListAPIView):
     """Message log, including simulated messages."""
 
     serializer_class = WhatsAppMessageSerializer
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_whatsapp')]
 
     def get_queryset(self):
         qs = WhatsAppMessage.objects.select_related('customer', 'bill', 'template').all()
@@ -127,7 +127,7 @@ class MessageHistoryView(generics.ListAPIView):
 class SimulateReplyView(APIView):
     """On-screen simulator helper to simulate a customer reply."""
 
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_whatsapp')]
 
     def post(self, request):
         phone = request.data.get('phone', '').strip()

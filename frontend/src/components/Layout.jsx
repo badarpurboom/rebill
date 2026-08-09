@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
-import { navFor, ROLE_LABEL } from '@/utils/roles'
+import { navFor } from '@/utils/roles'
 import { IconChefHat } from '@/components/ui/Icons'
 
 const ROLE_TONE = {
@@ -30,7 +30,7 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
-  const links = navFor(role)
+  const links = navFor(user)
 
   const handleLogout = () => {
     logout()
@@ -96,7 +96,7 @@ export default function Layout() {
         {/* Bottom User Avatar & Logout */}
         <div className="px-2 pt-2 border-t border-slate-100 flex flex-col items-center gap-2">
           <div
-            title={`${user?.full_name || user?.username} (${ROLE_LABEL[role]})`}
+            title={`${user?.full_name || user?.username} (${user?.custom_role?.name || user?.role_display || user?.role})`}
             className="flex size-9 items-center justify-center rounded-xl bg-slate-100 text-xs font-black text-slate-800 border border-slate-200"
           >
             {(user?.full_name || user?.username || '?').charAt(0).toUpperCase()}
@@ -135,7 +135,7 @@ export default function Layout() {
           <span
             className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${ROLE_TONE[role] ?? ''}`}
           >
-            {ROLE_LABEL[role]}
+            {user?.custom_role?.name || user?.role_display || user?.role}
           </span>
         </header>
 

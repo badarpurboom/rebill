@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useAuth } from '@/context/AuthContext'
+import { hasPermission } from '@/utils/roles'
 
 /* ─── Drag-and-Drop Canvas (Edit Mode only) ────────────────────────── */
 const CELL = 116
@@ -30,11 +32,15 @@ const STATUS_CFG = {
 
 /* ─── Card View (Normal Mode — matches Stitch design) ──────────────── */
 function TableCard({ table, onClick, onPayClick, onTransferClick, onVoidClick }) {
+  const { user } = useAuth()
   const cfg = STATUS_CFG[table.status] ?? STATUS_CFG.AVAILABLE
   const num = String(table.number).padStart(2, '0')
   const bill = table.running_total
     ? `₹${Number(table.running_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
     : '–'
+
+  const canSettle = hasPermission(user, 'settle_bill')
+  const canCancel = hasPermission(user, 'cancel_bill')
 
   return (
     <div
@@ -99,15 +105,17 @@ function TableCard({ table, onClick, onPayClick, onTransferClick, onVoidClick })
 
         {(table.status === 'BILLED' || table.status === 'OCCUPIED') && (
           <div className="mt-3 flex gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPayClick?.(e, table);
-              }}
-              className="flex-1 bg-rose-600 text-white rounded-lg py-1.5 text-xs font-bold shadow-md hover:bg-rose-700 active:scale-95 transition-all"
-            >
-              Pay Bill
-            </button>
+            {canSettle && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPayClick?.(e, table);
+                }}
+                className="flex-1 bg-rose-600 text-white rounded-lg py-1.5 text-xs font-bold shadow-md hover:bg-rose-700 active:scale-95 transition-all"
+              >
+                Pay Bill
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -120,18 +128,20 @@ function TableCard({ table, onClick, onPayClick, onTransferClick, onVoidClick })
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onVoidClick?.(e, table);
-              }}
-              title="Cancel / Clear Table Order"
-              className="px-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg shadow-sm hover:bg-rose-100 active:scale-95 transition-all flex items-center justify-center"
-            >
-              <svg className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
+            {canCancel && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onVoidClick?.(e, table);
+                }}
+                title="Cancel / Clear Table Order"
+                className="px-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg shadow-sm hover:bg-rose-100 active:scale-95 transition-all flex items-center justify-center"
+              >
+                <svg className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
           </div>
         )}
       </div>

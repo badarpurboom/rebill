@@ -4,7 +4,6 @@ import { useAuth } from '@/context/AuthContext'
 import { categories as categoryApi, items as itemApi } from '@/services/menu'
 import { tables as tableApi } from '@/services/tables'
 import { reportsService } from '@/services/reports'
-import { ROLE_LABEL } from '@/utils/roles'
 import { money } from '@/utils/format'
 import { PageLoader } from '@/components/ui/Misc'
 import {
@@ -95,7 +94,7 @@ export default function Dashboard() {
               </span>
             </div>
             <p className="text-xs font-semibold text-slate-400">
-              {user?.full_name || user?.username} ({ROLE_LABEL[role]}) · Real-time outlet metrics
+              {user?.full_name || user?.username} ({user?.custom_role?.name || user?.role_display || user?.role}) · Real-time outlet metrics
             </p>
           </div>
         </div>

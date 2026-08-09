@@ -6,6 +6,7 @@ import { restaurantSettings } from '@/services/billing'
 import Button from '@/components/ui/Button'
 import { FormRow, Input } from '@/components/ui/Field'
 import { PageLoader } from '@/components/ui/Misc'
+import RolesTab from '@/components/settings/RolesTab'
 
 export default function Settings() {
   const toast = useToast()
@@ -97,16 +98,22 @@ export default function Settings() {
       </div>
       
       {/* Tabs */}
-      <div className="flex space-x-2 border-b border-slate-200 px-2">
+      <div className="flex space-x-2 border-b border-slate-200 px-2 overflow-x-auto scroll-thin">
         <button
           onClick={() => setActiveTab('general')}
-          className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'general' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors shrink-0 ${activeTab === 'general' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           General Settings
         </button>
         <button
+          onClick={() => setActiveTab('roles')}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors shrink-0 ${activeTab === 'roles' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Staff &amp; Roles
+        </button>
+        <button
           onClick={() => setActiveTab('ai')}
-          className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'ai' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'ai' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           🤖 AI Integration
         </button>
@@ -333,6 +340,8 @@ export default function Settings() {
           </fieldset>
         </div>
           </form>
+        ) : activeTab === 'roles' ? (
+          <RolesTab />
         ) : (
           <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-6">
             <div>

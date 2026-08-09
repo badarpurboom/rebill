@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from apps.auth_app.permissions import IsOwner, IsOwnerOrCashier
+from apps.auth_app.permissions import IsOwner, HasDynamicPermission
 
 from .models import Customer, LoyaltyReason, LoyaltyTransaction
 from .serializers import (
@@ -17,7 +17,7 @@ from .serializers import (
 
 class CustomerViewSet(viewsets.ModelViewSet):
     serializer_class = CustomerSerializer
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_customers')]
 
     def get_queryset(self):
         qs = Customer.objects.all()

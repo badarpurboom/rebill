@@ -3,7 +3,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.auth_app.permissions import IsOwnerOrCashier
+from apps.auth_app.permissions import HasDynamicPermission
 from apps.whatsapp.models import FeedbackRequest
 from apps.whatsapp.serializers import FeedbackRequestSerializer
 
@@ -11,7 +11,7 @@ from apps.whatsapp.serializers import FeedbackRequestSerializer
 class FeedbackSummaryView(APIView):
     """Overall feedback stats, average rating, 1-5 star breakdown, and negative alerts (1-2 stars)."""
 
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_reports')]
 
     def get(self, request):
         qs = FeedbackRequest.objects.filter(submitted_at__isnull=False)
@@ -43,7 +43,7 @@ class FeedbackSummaryView(APIView):
 class FeedbackListView(generics.ListAPIView):
     """List of all submitted customer feedbacks."""
 
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_reports')]
     serializer_class = FeedbackRequestSerializer
 
     def get_queryset(self):

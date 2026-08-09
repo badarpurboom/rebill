@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -5,20 +6,35 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 User = get_user_model()
 
 
+class CustomRoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = apps.get_model('auth_app', 'CustomRole') if apps.ready else None
+        fields = ['id', 'name', 'permissions', 'is_system']
+
 class UserSerializer(serializers.ModelSerializer):
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     full_name = serializers.SerializerMethodField()
+    custom_role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'first_name', 'last_name', 'full_name',
-            'role', 'role_display', 'phone', 'is_active', 'date_joined',
+            'role', 'role_display', 'custom_role', 'phone', 'is_active', 'date_joined',
         ]
         read_only_fields = ['id', 'date_joined']
 
     def get_full_name(self, obj):
         return obj.get_full_name() or obj.username
+
+    def get_custom_role(self, obj):
+        if not obj.custom_role:
+            return None
+        return {
+            'id': obj.custom_role.id,
+            'name': obj.custom_role.name,
+            'permissions': obj.custom_role.permissions,
+        }
 
 
 class UserWriteSerializer(serializers.ModelSerializer):
@@ -30,7 +46,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'password', 'first_name', 'last_name',
-            'role', 'phone', 'is_active',
+            'role', 'custom_role', 'phone', 'is_active',
         ]
 
     def create(self, validated_data):

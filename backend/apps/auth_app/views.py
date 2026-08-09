@@ -5,13 +5,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import Role
-from .permissions import IsOwner
+from .models import Role, CustomRole
+from .permissions import IsOwner, has_perm
 from .serializers import (
-    PasswordConfirmSerializer,
     ReBillTokenObtainPairSerializer,
     UserSerializer,
     UserWriteSerializer,
+    CustomRoleSerializer,
 )
 
 User = get_user_model()
@@ -46,7 +46,7 @@ def verify_owner(request):
         username=serializer.validated_data['username'],
         password=serializer.validated_data['password'],
     )
-    if user is None or not user.is_active or user.role != Role.OWNER:
+    if user is None or not user.is_active or not has_perm(user, 'owner_override'):
         return Response(
             {'approved': False, 'detail': 'Invalid owner username or password.'},
             status=status.HTTP_401_UNAUTHORIZED,
@@ -59,8 +59,24 @@ class UserViewSet(viewsets.ModelViewSet):
 
     queryset = User.objects.all()
     permission_classes = [IsOwner]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action in ('list', 'retrieve'):
             return UserSerializer
         return UserWriteSerializer
+
+class CustomRoleViewSet(viewsets.ModelViewSet):
+    """Owner-only role management."""
+    queryset = CustomRole.objects.all()
+    serializer_class = CustomRoleSerializer
+    permission_classes = [IsOwner]
+    pagination_class = None
+
+    def destroy(self, request, *args, **kwargs):
+        role = self.get_object()
+        if role.is_system:
+            return Response({'detail': 'Cannot delete system roles.'}, status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(custom_role=role).exists():
+            return Response({'detail': 'Cannot delete role assigned to users.'}, status=status.HTTP_400_BAD_REQUEST)
+        return super().destroy(request, *args, **kwargs)

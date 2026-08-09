@@ -4,7 +4,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.auth_app.permissions import IsOwner, IsOwnerOrCashier
+from apps.auth_app.permissions import IsOwner, HasDynamicPermission
 from apps.customers.models import Customer
 from apps.whatsapp.services import segment_queryset
 
@@ -20,7 +20,7 @@ class CouponViewSet(viewsets.ModelViewSet):
     """CRUD for coupons."""
 
     serializer_class = CouponSerializer
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_coupons')]
 
     def get_queryset(self):
         qs = Coupon.objects.all()
@@ -38,7 +38,7 @@ class CouponViewSet(viewsets.ModelViewSet):
 class ValidateCouponView(APIView):
     """POS validation endpoint for coupon application."""
 
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_coupons')]
 
     def post(self, request):
         serializer = ValidateCouponSerializer(data=request.data)
@@ -109,7 +109,7 @@ class CouponUsageHistoryView(generics.ListAPIView):
     """Log of all coupon redemptions."""
 
     serializer_class = CouponUsageSerializer
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_coupons')]
 
     def get_queryset(self):
         return CouponUsage.objects.select_related('coupon', 'customer', 'bill').all()[:100]
@@ -118,7 +118,7 @@ class CouponUsageHistoryView(generics.ListAPIView):
 class GenerateCodeView(APIView):
     """Returns a random 6-character unique coupon code."""
 
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_coupons')]
 
     def get(self, request):
         code = generate_coupon_code()

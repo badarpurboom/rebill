@@ -3,6 +3,8 @@ import { money, priceShort } from '@/utils/format'
 import Button from '@/components/ui/Button'
 import { Badge, FoodTypeDot } from '@/components/ui/Misc'
 import { couponsService } from '@/services/coupons'
+import { useAuth } from '@/context/AuthContext'
+import { hasPermission } from '@/utils/roles'
 import {
   IconKitchen,
   IconPlus,
@@ -26,6 +28,7 @@ export default function CartPanel({
   sendingKot,
   generating,
 }) {
+  const { user } = useAuth()
   const items = order?.items ?? []
   const unsentCount = items.filter((l) => !l.sent_to_kitchen).length
 
@@ -177,24 +180,28 @@ export default function CartPanel({
 
         {/* Action CTAs */}
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            className="flex-1 justify-center py-2 text-xs font-bold border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl active:scale-95 transition-all"
-            onClick={onGenerateBill}
-            loading={generating}
-            disabled={items.length === 0}
-          >
-            Print Bill
-          </Button>
-          <Button
-            size="sm"
-            className="flex-1 justify-center py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
-            onClick={onPayBill}
-            disabled={items.length === 0}
-          >
-            Pay & Settle
-          </Button>
+          {hasPermission(user, 'print_bill') && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="flex-1 justify-center py-2 text-xs font-bold border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl active:scale-95 transition-all"
+              onClick={onGenerateBill}
+              loading={generating}
+              disabled={items.length === 0}
+            >
+              Print Bill
+            </Button>
+          )}
+          {hasPermission(user, 'settle_bill') && (
+            <Button
+              size="sm"
+              className="flex-1 justify-center py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+              onClick={onPayBill}
+              disabled={items.length === 0}
+            >
+              Pay & Settle
+            </Button>
+          )}
         </div>
       </div>
     </div>

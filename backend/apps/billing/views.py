@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.auth_app.models import Role
-from apps.auth_app.permissions import IsOwnerOrCashier
+from apps.auth_app.permissions import IsOwnerOrCashier, HasDynamicPermission, has_perm
 from apps.customers.models import Customer, LoyaltyReason, LoyaltyTransaction
 from apps.settings_app.models import RestaurantSettings
 from apps.tables.models import RestaurantTable, TableStatus
@@ -68,16 +68,16 @@ def _verify_owner(username, password, message):
     if not username or not password:
         raise ValidationError(message)
     owner = authenticate(username=username, password=password)
-    if owner is None or not owner.is_active or owner.role != Role.OWNER:
+    if owner is None or not owner.is_active or not has_perm(owner, 'owner_override'):
         raise ValidationError('Invalid owner username or password.')
     return owner
 
 
 class OrderViewSet(viewsets.ReadOnlyModelViewSet):
-    """Running orders. Owner + Cashier only — waiters do not enter orders."""
+    """Running orders. Access depends on 'view_pos' permission."""
 
     serializer_class = OrderSerializer
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_pos')]
     pagination_class = None
 
     def get_serializer_context(self):
@@ -144,6 +144,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'], url_path='items')
     @transaction.atomic
     def add_item(self, request, pk=None):
+        if not has_perm(request.user, 'punch_order'):
+            raise ValidationError('You do not have permission to punch orders.')
         order = self._running_order(pk)
         serializer = AddOrderItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -190,6 +192,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['patch'], url_path=r'items/(?P<item_id>\d+)')
     @transaction.atomic
     def update_item(self, request, pk=None, item_id=None):
+        if not has_perm(request.user, 'punch_order'):
+            raise ValidationError('You do not have permission to modify orders.')
         order = self._running_order(pk)
         line = order.items.filter(pk=item_id).first()
         if line is None:
@@ -254,6 +258,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['delete'], url_path=r'items/(?P<item_id>\d+)/remove')
     @transaction.atomic
     def remove_item(self, request, pk=None, item_id=None):
+        if not has_perm(request.user, 'punch_order'):
+            raise ValidationError('You do not have permission to remove items.')
         order = self._running_order(pk)
         deleted, _ = order.items.filter(pk=item_id).delete()
         if not deleted:
@@ -266,6 +272,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     @transaction.atomic
     def kot(self, request, pk=None):
         """Send everything added since the last ticket to the kitchen."""
+        if not has_perm(request.user, 'print_kot'):
+            raise ValidationError('You do not have permission to print KOT.')
         order = self._running_order(pk)
         pending = list(order.items.filter(kot__isnull=True))
         if not pending:
@@ -311,6 +319,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'])
     def preview(self, request, pk=None):
         """Live totals for a candidate discount — same maths as the real bill."""
+        if not has_perm(request.user, 'print_bill'):
+            raise ValidationError('You do not have permission to print bills.')
         order = self.get_object()
         serializer = PreviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -349,6 +359,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'], url_path='generate-bill')
     @transaction.atomic
     def generate_bill(self, request, pk=None):
+        if not has_perm(request.user, 'print_bill'):
+            raise ValidationError('You do not have permission to print bills.')
         order = self._running_order(pk)
         if not order.items.exists():
             raise ValidationError('Cannot generate bill for an empty order.')
@@ -451,6 +463,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         The table is immediately freed back to AVAILABLE.
         No bill is created — this is a hard delete of the running session.
         """
+        if not has_perm(request.user, 'cancel_bill'):
+            raise ValidationError('You do not have permission to void orders.')
         order = _order_queryset().filter(pk=pk).first()
         if order is None:
             raise ValidationError({'detail': 'Order not found.'})
@@ -474,7 +488,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 class BillViewSet(viewsets.ReadOnlyModelViewSet):
     """Order history + checkout. Search covers name, phone and bill number."""
 
-    permission_classes = [IsOwnerOrCashier]
+    permission_classes = [HasDynamicPermission('view_orders')]
 
     def get_serializer_class(self):
         return BillListSerializer if self.action == 'list' else BillSerializer
@@ -519,7 +533,7 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
 
         return qs
 
-    @action(detail=False, methods=['get'], permission_classes=[IsOwnerOrCashier])
+    @action(detail=False, methods=['get'], permission_classes=[HasDynamicPermission('view_orders')])
     def export_csv(self, request):
         """Export filtered bills to CSV."""
         qs = self.get_queryset()
@@ -556,7 +570,7 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
     @action(
         detail=False,
         methods=['post'],
-        permission_classes=[IsOwnerOrCashier],
+        permission_classes=[HasDynamicPermission('view_orders')],
         parser_classes=[MultiPartParser, FormParser],
     )
     def import_csv(self, request):
@@ -579,6 +593,8 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
         Points are awarded here rather than at bill generation, so a bill that
         is cancelled before payment never mints points.
         """
+        if not has_perm(request.user, 'settle_bill'):
+            raise ValidationError('You do not have permission to settle bills.')
         bill = self.get_object()
         if bill.status != BillStatus.UNPAID:
             raise ValidationError(f'This bill is already {bill.get_status_display()}.')
@@ -655,6 +671,8 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
         Loyalty is unwound both ways: points earned are taken back and points
         spent are returned, so a cancelled meal leaves no trace on the balance.
         """
+        if not has_perm(request.user, 'cancel_bill'):
+            raise ValidationError('You do not have permission to cancel bills.')
         bill = self.get_object()
         if bill.status == BillStatus.CANCELLED:
             raise ValidationError('This bill has already been cancelled.')

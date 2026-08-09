@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
 import * as authService from '@/services/auth'
 import { tokens } from '@/services/api'
-import { ROLES } from '@/utils/roles'
 
 const AuthContext = createContext(null)
 
@@ -57,9 +56,9 @@ export function AuthProvider({ children }) {
       user: state.user,
       status: state.status,
       role: state.user?.role ?? null,
-      isOwner: state.user?.role === ROLES.OWNER,
-      isCashier: state.user?.role === ROLES.CASHIER,
-      isWaiter: state.user?.role === ROLES.WAITER,
+      isOwner: state.user?.role === 'OWNER',
+      isCashier: state.user?.role === 'CASHIER',
+      isWaiter: state.user?.role === 'WAITER',
       login,
       logout,
     }),
