@@ -10,6 +10,8 @@ import { PageLoader } from '@/components/ui/Misc'
 export default function Settings() {
   const toast = useToast()
   const [config, setConfig] = useState(null)
+  const [activeTab, setActiveTab] = useState('general')
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const {
     register,
@@ -71,7 +73,7 @@ export default function Settings() {
   const totalGst = (Number(cgst || 0) + Number(sgst || 0)).toFixed(2)
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs">
         <div>
@@ -81,18 +83,38 @@ export default function Settings() {
           </p>
         </div>
 
-        <Button
-          type="submit"
-          loading={isSubmitting}
-          disabled={!isDirty}
-          className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl shadow-md shadow-rose-600/20 disabled:opacity-50"
+        {activeTab === 'general' && (
+          <Button
+            onClick={handleSubmit(onSubmit)}
+            loading={isSubmitting}
+            disabled={!isDirty}
+            className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl shadow-md shadow-rose-600/20 disabled:opacity-50"
+          >
+            {isDirty ? 'Save All Changes' : 'All Settings Saved'}
+          </Button>
+        )}
+      </div>
+      
+      {/* Tabs */}
+      <div className="flex space-x-2 border-b border-slate-200 px-2">
+        <button
+          onClick={() => setActiveTab('general')}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'general' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
-          {isDirty ? 'Save All Changes' : 'All Settings Saved'}
-        </Button>
+          General Settings
+        </button>
+        <button
+          onClick={() => setActiveTab('ai')}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'ai' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          🤖 AI Integration
+        </button>
       </div>
 
       <div className="space-y-6">
-        {/* Bill Header Card */}
+        {activeTab === 'general' ? (
+          <form id="settings-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* Bill Header Card */}
         <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
           <h2 className="text-sm font-extrabold tracking-wider text-slate-400 uppercase">Bill Header &amp; Receipt Profile</h2>
 
@@ -309,7 +331,97 @@ export default function Settings() {
             </div>
           </fieldset>
         </div>
+          </form>
+        ) : (
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-6">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                🤖 Connect My POS to AI
+              </h2>
+              <p className="mt-1 text-sm font-medium text-slate-500 max-w-2xl">
+                Generate a secure token to connect your POS with ChatGPT, Claude, or other AI assistants. 
+                They will have read-only access to answer questions about your sales, inventory, and customers.
+              </p>
+            </div>
+
+            {!config?.ai_connection_token ? (
+              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+                <p className="text-sm font-bold text-slate-600 mb-4">No AI connection token generated yet.</p>
+                <Button 
+                  onClick={async () => {
+                    try {
+                      setIsGenerating(true)
+                      await restaurantSettings.generateAIToken()
+                      const updated = await restaurantSettings.get()
+                      setConfig(updated)
+                      toast.success("AI Token Generated")
+                    } catch (e) {
+                      toast.error("Failed to generate token")
+                    } finally {
+                      setIsGenerating(false)
+                    }
+                  }}
+                  loading={isGenerating}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl"
+                >
+                  Generate Secure AI Token
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 space-y-3">
+                  <p className="text-xs font-black text-indigo-800 uppercase tracking-wider">Your Secret AI Connection Prompt</p>
+                  <p className="text-sm font-medium text-indigo-900">
+                    Copy the text below and paste it directly into ChatGPT or your favorite AI.
+                  </p>
+                  
+                  <div className="relative group">
+                    <pre className="bg-slate-900 text-slate-50 p-4 rounded-xl text-sm font-mono overflow-x-auto border border-slate-800 whitespace-pre-wrap">
+{`My Restaurant POS is connected here:
+${window.location.origin}/api/ai/
+
+Use this connection to answer my questions about sales, products, and customers.
+Always use my POS data when answering business-related questions.
+
+My secure connection token is: ${config.ai_connection_token}`}
+                    </pre>
+                    <button 
+                      onClick={() => {
+                        const text = `My Restaurant POS is connected here:\n${window.location.origin}/api/ai/\n\nUse this connection to answer my questions about sales, products, and customers.\nAlways use my POS data when answering business-related questions.\n\nMy secure connection token is: ${config.ai_connection_token}`
+                        navigator.clipboard.writeText(text)
+                        toast.success("Copied to clipboard!")
+                      }}
+                      className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white rounded-lg p-2 text-xs font-bold backdrop-blur-sm transition-all"
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-slate-100">
+                  <button 
+                    onClick={async () => {
+                      if (window.confirm("Are you sure? This will disconnect any active AI connections.")) {
+                        try {
+                          await restaurantSettings.revokeAIToken()
+                          const updated = await restaurantSettings.get()
+                          setConfig(updated)
+                          toast.success("AI Token Revoked")
+                        } catch (e) {
+                          toast.error("Failed to revoke token")
+                        }
+                      }
+                    }}
+                    className="text-xs font-bold text-rose-500 hover:text-rose-600 hover:underline px-3 py-1.5"
+                  >
+                    Revoke Connection
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-    </form>
+    </div>
   )
 }

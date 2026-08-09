@@ -78,11 +78,11 @@ def build_context(customer=None, extra=None):
     return context
 
 
-def send(trigger, *, phone, customer=None, context=None, bill=None, campaign=None, body=None):
+def send(trigger, *, phone, customer=None, context=None, bill=None, campaign=None, body=None, template_override=None):
     """Render and deliver one message. Returns the stored WhatsAppMessage."""
     config = WhatsAppConfig.load()
     context = build_context(customer, context)
-    template = bound_template(trigger)
+    template = template_override or bound_template(trigger)
 
     if body is None:
         body = (
@@ -295,8 +295,9 @@ def send_campaign(campaign, user=None):
             phone=customer.phone,
             customer=customer,
             campaign=campaign,
+            template_override=campaign.template,
             context={'message': campaign.body},
-            body=_personalise(campaign.body, customer),
+            body=_personalise(campaign.body, customer) if not campaign.template else None,
         )
         if message.status == MessageStatus.FAILED:
             failed += 1

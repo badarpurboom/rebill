@@ -33,7 +33,7 @@ const ThermalBill = forwardRef(function ThermalBill({ bill }, ref) {
 
       <div className="flex justify-between text-[11px]">
         <span className="font-bold">Bill: {bill.bill_number}</span>
-        <span>Table {bill.table_number}</span>
+        <span className="font-bold">{bill.table_number === 'Takeaway' ? (bill.tag_name ? `Parcel (${bill.tag_name})` : 'Takeaway') : `Table ${bill.table_number}`}</span>
       </div>
       <div className="flex justify-between text-[11px]">
         <span>{stamp}</span>

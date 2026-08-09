@@ -37,7 +37,9 @@ export default function CartPanel({
           <h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-400">Order Summary</h2>
           <p className="text-base font-black text-slate-900 flex items-center gap-2">
             <IconPos className="size-4 text-rose-600" />
-            {order?.order_type === 'TAKEAWAY' ? 'Takeaway Parcel' : `Table ${order?.table_number ?? ''}`}
+            {order?.order_type === 'TAKEAWAY'
+              ? `Takeaway ${order?.tag_name ? `(${order.tag_name})` : 'Parcel'}`
+              : `Table ${order?.table_number ?? ''}`}
           </p>
         </div>
         <div className="flex items-center gap-1.5">

@@ -22,8 +22,8 @@ const ThermalKOT = forwardRef(function ThermalKOT({ kot }, ref) {
         <p className="text-lg font-bold">** KOT **</p>
         <p className="text-2xl font-bold">#{kot.number}</p>
         {(!kot.table_number || kot.table_number === 'Takeaway') && (
-          <p className="text-sm font-black bg-black text-white px-2 py-0.5 mt-1 inline-block">
-            *** TAKEAWAY / PARCEL ***
+          <p className="text-sm font-black bg-black text-white px-2 py-0.5 mt-1 inline-block uppercase">
+            *** TAKEAWAY {kot.tag_name ? `(${kot.tag_name})` : '/ PARCEL'} ***
           </p>
         )}
       </div>

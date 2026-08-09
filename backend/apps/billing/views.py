@@ -80,6 +80,11 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsOwnerOrCashier]
     pagination_class = None
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['settings'] = RestaurantSettings.load()
+        return context
+
     def get_queryset(self):
         qs = _order_queryset()
         if status_filter := self.request.query_params.get('status'):
@@ -126,9 +131,11 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     def takeaway(self, request):
         """Open a new Takeaway / Parcel order without assigning a table."""
         from .models import OrderType
+        tag_name = str(request.data.get('tag_name', '')).strip()[:60]
         order = Order.objects.create(
             order_type=OrderType.TAKEAWAY,
             table=None,
+            tag_name=tag_name,
             created_by=request.user,
         )
         return Response(self.get_serializer(order).data, status=status.HTTP_201_CREATED)
@@ -191,6 +198,12 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         quantity = request.data.get('quantity')
         target_line = line
 
+        if 'unit_price' in request.data:
+            try:
+                line.unit_price = Decimal(str(request.data['unit_price']))
+            except Exception:
+                pass
+
         if quantity is not None:
             quantity = int(quantity)
             if quantity < 1:
@@ -210,7 +223,9 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                 ).first()
                 if unsent_line:
                     unsent_line.quantity += diff
-                    unsent_line.save(update_fields=['quantity'])
+                    if 'unit_price' in request.data:
+                        unsent_line.unit_price = line.unit_price
+                    unsent_line.save(update_fields=['quantity', 'unit_price'])
                     target_line = unsent_line
                 else:
                     target_line = OrderItem.objects.create(
@@ -228,8 +243,9 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                 if 'note' in request.data:
                     line.note = str(request.data['note'])[:120]
                 line.save()
-        elif 'note' in request.data:
-            line.note = str(request.data['note'])[:120]
+        else:
+            if 'note' in request.data:
+                line.note = str(request.data['note'])[:120]
             line.save()
 
         order.save(update_fields=['updated_at'])

@@ -42,6 +42,7 @@ class Order(models.Model):
     status = models.CharField(
         max_length=10, choices=OrderStatus.choices, default=OrderStatus.RUNNING
     )
+    tag_name = models.CharField(max_length=60, blank=True)
     created_by = models.ForeignKey(
         django_settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='orders'
     )
@@ -143,6 +144,9 @@ class PaymentMode(models.TextChoices):
     CASH = 'CASH', 'Cash'
     CARD = 'CARD', 'Card'
     UPI = 'UPI', 'UPI'
+    DUE = 'DUE', 'Credit / Udhar'
+    SPLIT = 'SPLIT', 'Split Payment'
+    ONLINE = 'ONLINE', 'Online'
 
 
 class BillStatus(models.TextChoices):
@@ -194,7 +198,7 @@ class Bill(models.Model):
     points_earned = models.PositiveIntegerField(default=0)
 
     status = models.CharField(max_length=10, choices=BillStatus.choices, default=BillStatus.UNPAID)
-    payment_mode = models.CharField(max_length=4, choices=PaymentMode.choices, blank=True)
+    payment_mode = models.CharField(max_length=10, choices=PaymentMode.choices, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
 
     # ── Cancel / refund audit ────────────────────────────────────────────

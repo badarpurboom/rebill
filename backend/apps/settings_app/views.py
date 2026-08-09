@@ -21,3 +21,25 @@ class SettingsView(RetrieveUpdateAPIView):
 
     def get_object(self):
         return RestaurantSettings.load()
+
+import secrets
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
+class AITokenManagerView(APIView):
+    """POST generates a new token. DELETE revokes it. Only Owner."""
+    permission_classes = [IsOwner]
+
+    def post(self, request):
+        settings = RestaurantSettings.load()
+        # Generate a random 32 character hex string, prefixed with POS-
+        token = "POS-" + secrets.token_hex(16)
+        settings.ai_connection_token = token
+        settings.save()
+        return Response({"token": token, "message": "New AI connection token generated."})
+        
+    def delete(self, request):
+        settings = RestaurantSettings.load()
+        settings.ai_connection_token = None
+        settings.save()
+        return Response({"message": "AI connection token revoked."})

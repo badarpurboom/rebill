@@ -14,6 +14,7 @@ import TransferModal from '@/components/tables/TransferModal'
 import VoidOrderModal from '@/components/tables/VoidOrderModal'
 import PaymentModal from '@/components/pos/PaymentModal'
 import QuickCustomerModal from '@/components/customers/QuickCustomerModal'
+import TakeawayNameModal from '@/components/pos/TakeawayNameModal'
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function todayLabel() {
@@ -117,11 +118,18 @@ export default function Tables() {
     navigate(`/pos?table=${table.id}`)
   }
 
+  const [takeawayNameModalOpen, setTakeawayNameModalOpen] = useState(false)
+
   /* Start new Takeaway order */
-  const handleStartTakeaway = async () => {
+  const handleStartTakeaway = () => {
+    setTakeawayNameModalOpen(true)
+  }
+
+  const handleConfirmTakeawayName = async (tagName) => {
+    setTakeawayNameModalOpen(false)
     setStartingTakeaway(true)
     try {
-      const order = await orderApi.createTakeaway()
+      const order = await orderApi.createTakeaway(tagName)
       navigate(`/pos?order=${order.id}`)
     } catch (err) {
       toast.error(errorMessage(err, 'Failed to start takeaway.'))
@@ -417,9 +425,20 @@ export default function Tables() {
           open={quickCustomerOpen}
           minRedeemPoints={0}
           maxRedeemable={0}
-          onClose={() => setQuickCustomerOpen(false)}
+          onClose={() => {
+            setQuickCustomerOpen(false)
+            setPendingPayOrder(null)
+          }}
           onSaveAndProceed={handleQuickCustomerSave}
           onSkipAndProceed={handleQuickCustomerSkip}
+        />
+      )}
+
+      {takeawayNameModalOpen && (
+        <TakeawayNameModal
+          open={takeawayNameModalOpen}
+          onClose={() => setTakeawayNameModalOpen(false)}
+          onSubmit={handleConfirmTakeawayName}
         />
       )}
     </div>

@@ -70,11 +70,12 @@ class KOTItemSerializer(serializers.ModelSerializer):
 class KOTSerializer(serializers.ModelSerializer):
     items = KOTItemSerializer(many=True, read_only=True)
     table_number = serializers.CharField(source='order.table.number', read_only=True, default='Takeaway')
+    tag_name = serializers.CharField(source='order.tag_name', read_only=True, default='')
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
 
     class Meta:
         model = KOT
-        fields = ['id', 'number', 'order', 'table_number', 'created_by_name', 'created_at', 'items']
+        fields = ['id', 'number', 'order', 'table_number', 'tag_name', 'created_by_name', 'created_at', 'items']
 
 
 MONEY_FIELDS = [
@@ -89,6 +90,7 @@ class BillSerializer(serializers.ModelSerializer):
     payment_mode_display = serializers.CharField(source='get_payment_mode_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     table_number = serializers.CharField(source='order.table.number', read_only=True, default='Takeaway')
+    tag_name = serializers.CharField(source='order.tag_name', read_only=True, default='')
     items = OrderItemSerializer(source='order.items', many=True, read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     approved_by_name = serializers.CharField(
@@ -103,7 +105,7 @@ class BillSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bill
         fields = [
-            'id', 'bill_number', 'order', 'order_type', 'order_type_display', 'table_number', 'status', 'status_display',
+            'id', 'bill_number', 'order', 'order_type', 'order_type_display', 'table_number', 'tag_name', 'status', 'status_display',
             'customer', 'customer_name', 'customer_phone',
             *MONEY_FIELDS,
             'payment_mode', 'payment_mode_display', 'paid_at',
@@ -120,6 +122,7 @@ class BillListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     payment_mode_display = serializers.CharField(source='get_payment_mode_display', read_only=True)
     table_number = serializers.CharField(source='order.table.number', read_only=True, default='Takeaway')
+    tag_name = serializers.CharField(source='order.tag_name', read_only=True, default='')
     customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
     customer_phone = serializers.CharField(source='customer.phone', read_only=True, default=None)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
@@ -128,7 +131,7 @@ class BillListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bill
         fields = [
-            'id', 'bill_number', 'order_type', 'order_type_display', 'table_number', 'status', 'status_display',
+            'id', 'bill_number', 'order_type', 'order_type_display', 'table_number', 'tag_name', 'status', 'status_display',
             'customer', 'customer_name', 'customer_phone',
             'subtotal', 'discount_amount', 'total', 'redeem_amount', 'net_payable',
             'points_earned', 'points_redeemed',
@@ -158,7 +161,7 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'order_type', 'order_type_display', 'table', 'table_number', 'status', 'status_display',
-            'customer', 'customer_detail',
+            'tag_name', 'customer', 'customer_detail',
             'created_by_name', 'created_at', 'updated_at',
             'items', 'item_count', 'subtotal', 'has_unsent_items', 'has_kots', 'totals', 'bill',
         ]

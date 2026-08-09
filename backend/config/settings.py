@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'apps.reports',
     'apps.feedback',
     'apps.settings_app',
+    'apps.ai_gateway',
 ]
 
 MIDDLEWARE = [

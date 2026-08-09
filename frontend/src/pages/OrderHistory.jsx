@@ -42,10 +42,11 @@ export default function OrderHistory() {
   const [viewing, setViewing] = useState(null)
   const [cancelling, setCancelling] = useState(null)
   const [importing, setImporting] = useState(false)
+  const [page, setPage] = useState(1)
 
   const load = useCallback(async () => {
     try {
-      const params = {}
+      const params = { page }
       if (search.trim()) params.search = search.trim()
       if (status) params.status = status
       if (mode) params.payment_mode = mode
@@ -61,7 +62,7 @@ export default function OrderHistory() {
       toast.error(errorMessage(error, 'Failed to load order history.'))
       setRows([])
     }
-  }, [search, status, mode, period, dateFrom, dateTo, toast])
+  }, [search, status, mode, period, dateFrom, dateTo, page, toast])
 
   useEffect(() => {
     const timer = setTimeout(load, search ? 300 : 0)
@@ -149,7 +150,7 @@ export default function OrderHistory() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search bill #, customer name or phone…"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all"
             />
@@ -158,7 +159,7 @@ export default function OrderHistory() {
           {/* Period */}
           <select
             value={period}
-            onChange={(e) => setPeriod(e.target.value)}
+            onChange={(e) => { setPeriod(e.target.value); setPage(1); }}
             className="rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 text-xs font-bold text-slate-700 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all w-36 shrink-0 cursor-pointer"
           >
             {PERIOD_PRESETS.map((p) => (
@@ -169,7 +170,7 @@ export default function OrderHistory() {
           {/* Status */}
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => { setStatus(e.target.value); setPage(1); }}
             className="rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 text-xs font-bold text-slate-700 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all w-32 shrink-0 cursor-pointer"
           >
             {STATUSES.map((s) => (
@@ -180,7 +181,7 @@ export default function OrderHistory() {
           {/* Payment Mode */}
           <select
             value={mode}
-            onChange={(e) => setMode(e.target.value)}
+            onChange={(e) => { setMode(e.target.value); setPage(1); }}
             className="rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 text-xs font-bold text-slate-700 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all w-36 shrink-0 cursor-pointer"
           >
             <option value="">All Payments</option>
@@ -197,14 +198,14 @@ export default function OrderHistory() {
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
               className="rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs font-bold text-slate-700 outline-none focus:border-rose-400 transition-all"
             />
             <span className="text-xs font-semibold text-slate-400">to</span>
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
               className="rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs font-bold text-slate-700 outline-none focus:border-rose-400 transition-all"
             />
           </div>
@@ -224,102 +225,123 @@ export default function OrderHistory() {
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/60 text-left">
-                <th className="px-5 py-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Bill # &amp; Date</th>
-                <th className="px-5 py-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Customer</th>
-                <th className="w-20 px-5 py-3 text-center text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Items</th>
-                <th className="w-32 px-5 py-3 text-right text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Amount</th>
-                <th className="w-36 px-5 py-3 text-center text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Status</th>
-                <th className="w-24 px-5 py-3 text-right text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {rows.map((bill) => (
-                <tr
-                  key={bill.id}
-                  className={`group transition-colors hover:bg-slate-50/70 ${
-                    bill.status === 'CANCELLED' ? 'opacity-50' : ''
-                  }`}
-                >
-                  {/* Bill # & Date */}
-                  <td className="px-5 py-3.5 cursor-pointer" onClick={() => openBill(bill)}>
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-slate-900">{bill.bill_number}</span>
-                      {bill.order_type === 'TAKEAWAY' && (
-                        <span className="rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[9px] font-black text-amber-600">
-                          🛍️ Takeaway
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-xs font-semibold text-slate-400">
-                      {bill.order_type === 'TAKEAWAY' ? 'Counter' : `Table ${bill.table_number}`} · {dateTime(bill.created_at)}
-                    </p>
-                  </td>
-
-                  {/* Customer */}
-                  <td className="cursor-pointer px-5 py-3.5" onClick={() => openBill(bill)}>
-                    {bill.customer_name ? (
-                      <>
-                        <p className="font-extrabold text-slate-900">{bill.customer_name}</p>
-                        <p className="tabular text-xs font-semibold text-slate-400">{bill.customer_phone}</p>
-                      </>
-                    ) : (
-                      <span className="text-slate-300 font-bold">—</span>
-                    )}
-                  </td>
-
-                  {/* Items count */}
-                  <td className="tabular px-5 py-3.5 text-center font-extrabold text-slate-700">
-                    {bill.item_count}
-                  </td>
-
-                  {/* Amount */}
-                  <td className="cursor-pointer px-5 py-3.5 text-right" onClick={() => openBill(bill)}>
-                    <p className="tabular font-black text-slate-900">{money(bill.net_payable)}</p>
-                    {Number(bill.redeem_amount) > 0 && (
-                      <p className="text-[10px] font-bold text-amber-600 mt-0.5">
-                        ⭐ {bill.points_redeemed} pts used
-                      </p>
-                    )}
-                  </td>
-
-                  {/* Status */}
-                  <td className="px-5 py-3.5 text-center">
-                    <Badge tone={BILL_STATUS_TONE[bill.status]}>{bill.status_display}</Badge>
-                    {bill.payment_mode && (
-                      <p className="mt-1 text-[10px] font-extrabold text-slate-400 uppercase">
-                        {bill.payment_mode_display}
-                      </p>
-                    )}
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => openBill(bill)}
-                        title="Print Bill"
-                        className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all"
-                      >
-                        🖨️
-                      </button>
-                      {bill.status !== 'CANCELLED' && (
-                        <button
-                          onClick={() => setCancelling(bill)}
-                          title="Cancel Bill"
-                          className="rounded-xl p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all"
-                        >
-                          ✖
-                        </button>
-                      )}
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/60 text-left">
+                  <th className="px-5 py-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Bill # &amp; Date</th>
+                  <th className="px-5 py-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Customer</th>
+                  <th className="w-20 px-5 py-3 text-center text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Items</th>
+                  <th className="w-32 px-5 py-3 text-right text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Amount</th>
+                  <th className="w-36 px-5 py-3 text-center text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Status</th>
+                  <th className="w-24 px-5 py-3 text-right text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((bill) => (
+                  <tr
+                    key={bill.id}
+                    className={`group transition-colors hover:bg-slate-50/70 ${
+                      bill.status === 'CANCELLED' ? 'opacity-50' : ''
+                    }`}
+                  >
+                    {/* Bill # & Date */}
+                    <td className="px-5 py-3.5 cursor-pointer" onClick={() => openBill(bill)}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900">{bill.bill_number}</span>
+                        {bill.order_type === 'TAKEAWAY' && (
+                          <span className="rounded-md bg-rose-100/60 border border-rose-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-700">Parcel</span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                        {dateTime(bill.created_at)}
+                      </p>
+                    </td>
+                    
+                    {/* Customer */}
+                    <td className="px-5 py-3.5 cursor-pointer" onClick={() => openBill(bill)}>
+                      {bill.customer_name ? (
+                        <>
+                          <div className="font-bold text-slate-800">{bill.customer_name}</div>
+                          <div className="text-[11px] font-medium text-slate-400">{bill.customer_phone}</div>
+                        </>
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-400">—</span>
+                      )}
+                    </td>
+
+                    {/* Items */}
+                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => openBill(bill)}>
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[11px] font-black text-slate-700">
+                        {bill.item_count}
+                      </span>
+                    </td>
+
+                    {/* Amount */}
+                    <td className="px-5 py-3.5 text-right cursor-pointer" onClick={() => openBill(bill)}>
+                      <div className="text-[15px] font-black text-slate-900">{money(bill.net_payable)}</div>
+                      {bill.payment_mode && (
+                        <div className="text-[10px] font-bold text-slate-500">via {bill.payment_mode_display}</div>
+                      )}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => openBill(bill)}>
+                      <Badge tone={BILL_STATUS_TONE[bill.status]}>{bill.status_display}</Badge>
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => openBill(bill)}
+                          title="Print Bill"
+                          className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all"
+                        >
+                          🖨️
+                        </button>
+                        {bill.status !== 'CANCELLED' && (
+                          <button
+                            onClick={() => setCancelling(bill)}
+                            title="Cancel Bill"
+                            className="rounded-xl p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all"
+                          >
+                            ✖
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Pagination Controls */}
+          {count > 25 && (
+            <div className="flex items-center justify-between border-t border-slate-200/80 bg-slate-50/50 px-5 py-3">
+              <span className="text-xs font-semibold text-slate-500">
+                Showing {((page - 1) * 25) + 1} to {Math.min(page * 25, count)} of {count}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={page === 1}
+                  onClick={() => setPage(page - 1)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  Previous
+                </button>
+                <span className="text-xs font-black text-slate-800 px-2">Page {page} of {Math.ceil(count / 25)}</span>
+                <button
+                  disabled={page >= Math.ceil(count / 25)}
+                  onClick={() => setPage(page + 1)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

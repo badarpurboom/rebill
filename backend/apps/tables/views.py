@@ -26,7 +26,7 @@ class TableViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        open_orders = Order.objects.filter(status__in=OPEN_STATUSES).prefetch_related('items')
+        open_orders = Order.objects.filter(status__in=OPEN_STATUSES).select_related('customer').prefetch_related('items')
         return RestaurantTable.objects.filter(is_active=True).prefetch_related(
             Prefetch('orders', queryset=open_orders, to_attr='_open_orders')
         )

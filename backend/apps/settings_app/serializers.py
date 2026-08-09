@@ -19,8 +19,9 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer):
             'loyalty_enabled', 'loyalty_earn_amount', 'loyalty_earn_points',
             'loyalty_redeem_value', 'loyalty_min_redeem_points', 'loyalty_max_redeem_percent',
             'updated_at',
+            'ai_connection_token',
         ]
-        read_only_fields = ['next_bill_number', 'updated_at']
+        read_only_fields = ['next_bill_number', 'updated_at', 'ai_connection_token']
 
     def get_next_bill_preview(self, obj):
         return f'{obj.bill_prefix}-{obj.next_bill_number:0{obj.bill_number_padding}d}'

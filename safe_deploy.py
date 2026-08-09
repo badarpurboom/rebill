@@ -14,8 +14,8 @@ try:
     print("Connected successfully!\n")
 
     commands = [
-        # Step 1: Pull latest code (safe - no data deleted)
-        ("git pull origin main", "Pulling latest code from GitHub...", 60),
+        # Step 1: Pull latest code (safe - no database data deleted)
+        ("git fetch origin main && git reset --hard origin/main && git pull origin main", "Pulling latest code from GitHub...", 60),
 
         # Step 2: Install any new frontend dependencies
         ("cd /var/www/rebill/frontend && npm install --silent", "Installing frontend dependencies...", 120),

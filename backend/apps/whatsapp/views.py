@@ -18,6 +18,7 @@ from .models import (
     TriggerBinding,
     WhatsAppConfig,
     WhatsAppMessage,
+    AutoCampaignRule,
 )
 from .serializers import (
     CampaignSerializer,
@@ -28,6 +29,7 @@ from .serializers import (
     TriggerBindingSerializer,
     WhatsAppConfigSerializer,
     WhatsAppMessageSerializer,
+    AutoCampaignRuleSerializer,
 )
 from .services import (
     segment_counts,
@@ -167,6 +169,24 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Campaign.objects.select_related('template', 'created_by').all()
+
+    def perform_create(self, serializer):
+        from .models import CampaignStatus
+        from django.utils import timezone
+        
+        scheduled_at = serializer.validated_data.get('scheduled_at')
+        status = CampaignStatus.SCHEDULED if scheduled_at and scheduled_at > timezone.now() else CampaignStatus.DRAFT
+        serializer.save(created_by=self.request.user, status=status)
+
+
+class AutoCampaignRuleViewSet(viewsets.ModelViewSet):
+    """Auto Campaign Rule CRUD."""
+
+    serializer_class = AutoCampaignRuleSerializer
+    permission_classes = [IsOwner]
+
+    def get_queryset(self):
+        return AutoCampaignRule.objects.select_related('template', 'created_by').all()
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

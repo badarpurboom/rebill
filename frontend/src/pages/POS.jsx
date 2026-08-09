@@ -19,6 +19,7 @@ import PrintSlipModal from '@/components/print/PrintSlipModal'
 import ThermalKOT from '@/components/print/ThermalKOT'
 import ThermalBill from '@/components/print/ThermalBill'
 import VoidOrderModal from '@/components/tables/VoidOrderModal'
+import TakeawayNameModal from '@/components/pos/TakeawayNameModal'
 import {
   IconPos,
   IconTables,
@@ -34,7 +35,7 @@ export default function POS() {
   const [menu, setMenu] = useState({ items: [], categories: [] })
   const [settings, setSettings] = useState(null)
   const [order, setOrder] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [activeTakeawaysList, setActiveTakeawaysList] = useState([])
   const [showTakeawaysModal, setShowTakeawaysModal] = useState(false)
 
@@ -70,10 +71,10 @@ export default function POS() {
       .then(([items, categories, config, openOrders]) => {
         setMenu({ items, categories })
         setSettings(config)
-        setActiveTakeawaysList(openOrders.filter((o) => o.order_type === 'TAKEAWAY' && o.has_kots))
+        setActiveTakeawaysList(openOrders.filter((o) => o.order_type === 'TAKEAWAY'))
       })
-      .catch((error) => toast.error(errorMessage(error, 'Failed to load menu.')))
-  }, [toast])
+      .catch((error) => console.error('Failed to load menu:', error))
+  }, [])
 
   const orderIdParam = params.get('order')
 
@@ -301,12 +302,19 @@ export default function POS() {
     setPayingOrder(target)
   }
 
-  const startTakeaway = async () => {
+  const [takeawayNameModalOpen, setTakeawayNameModalOpen] = useState(false)
+
+  const startTakeaway = () => {
+    setTakeawayNameModalOpen(true)
+  }
+
+  const handleConfirmTakeawayName = async (tagName) => {
+    setTakeawayNameModalOpen(false)
     try {
-      const takeawayOrder = await orderApi.createTakeaway()
+      const takeawayOrder = await orderApi.createTakeaway(tagName)
       setOrder(takeawayOrder)
       setParams({ order: String(takeawayOrder.id) })
-      toast.success('Parcel Takeaway Order started!')
+      toast.success(`Takeaway Order ${tagName ? `(${tagName})` : ''} started!`)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to start takeaway order.'))
     }
@@ -347,6 +355,14 @@ export default function POS() {
               setPayingOrder(null)
               refreshLauncherData()
             }}
+          />
+        )}
+
+        {takeawayNameModalOpen && (
+          <TakeawayNameModal
+            open={takeawayNameModalOpen}
+            onClose={() => setTakeawayNameModalOpen(false)}
+            onSubmit={handleConfirmTakeawayName}
           />
         )}
 
@@ -557,6 +573,14 @@ export default function POS() {
           }}
           onSaveAndProceed={handleQuickCustomerSave}
           onSkipAndProceed={handleQuickCustomerSkip}
+        />
+      )}
+
+      {takeawayNameModalOpen && (
+        <TakeawayNameModal
+          open={takeawayNameModalOpen}
+          onClose={() => setTakeawayNameModalOpen(false)}
+          onSubmit={handleConfirmTakeawayName}
         />
       )}
 
@@ -772,7 +796,7 @@ function POSStartScreen({ onPickTable, onPickOrder, onTakeaway, onPayTakeaway, o
                       title="Click to view/add items in POS"
                     >
                       <h3 className="text-sm font-black text-slate-900 truncate hover:text-rose-600 transition-colors">
-                        {takeaway.customer_detail?.name || 'Parcel Customer'}
+                        {takeaway.tag_name ? `🛍️ ${takeaway.tag_name}` : (takeaway.customer_detail?.name || 'Parcel Customer')}
                       </h3>
                       <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
                         {takeaway.item_count} Items • Ready Counter

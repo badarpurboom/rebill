@@ -66,6 +66,12 @@ class RestaurantSettings(models.Model):
         help_text='Ek bill me zyada se zyada itne % tak points se bhar sakte hain',
     )
 
+    # ── AI Integration ───────────────────────────────────────────────────
+    ai_connection_token = models.CharField(
+        max_length=64, blank=True, null=True, unique=True,
+        help_text='Secure token for AI Gateway connections. Keep this secret.',
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

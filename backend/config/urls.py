@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/coupons/', include('apps.coupons.urls')),
     path('api/feedback/', include('apps.feedback.urls')),
     path('api/reports/', include('apps.reports.urls')),
+    path('api/ai/', include('apps.ai_gateway.urls')),
 ]
 
 if settings.DEBUG:

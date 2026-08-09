@@ -235,6 +235,7 @@ class Segment(models.TextChoices):
 
 class CampaignStatus(models.TextChoices):
     DRAFT = 'DRAFT', 'Draft'
+    SCHEDULED = 'SCHED', 'Scheduled'
     SENT = 'SENT', 'Bheja ja chuka'
 
 
@@ -246,11 +247,12 @@ class Campaign(models.Model):
     template = models.ForeignKey(
         MessageTemplate, on_delete=models.SET_NULL, null=True, blank=True
     )
-    body = models.TextField(help_text='Hindi message — {name} customer ke naam se badal jayega')
+    body = models.TextField(blank=True, help_text='Hindi message — {name} customer ke naam se badal jayega')
     status = models.CharField(
         max_length=6, choices=CampaignStatus.choices, default=CampaignStatus.DRAFT
     )
 
+    scheduled_at = models.DateTimeField(null=True, blank=True)
     recipient_count = models.PositiveIntegerField(default=0)
     sent_count = models.PositiveIntegerField(default=0)
     failed_count = models.PositiveIntegerField(default=0)
@@ -267,6 +269,53 @@ class Campaign(models.Model):
 
     def __str__(self):
         return f'{self.name} → {self.get_segment_display()}'
+
+
+class AutoTriggerEvent(models.TextChoices):
+    DAYS_SINCE_LAST_VISIT = 'DAYS_SINCE_LAST_VISIT', 'Days since last visit'
+
+
+class AutoCampaignRule(models.Model):
+    """A rule to trigger a template automatically based on a condition."""
+
+    name = models.CharField(max_length=120)
+    trigger_event = models.CharField(
+        max_length=50, choices=AutoTriggerEvent.choices, default=AutoTriggerEvent.DAYS_SINCE_LAST_VISIT
+    )
+    target_days = models.PositiveIntegerField(help_text='How many days after the event to trigger.')
+    template = models.ForeignKey(MessageTemplate, on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        django_settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'whatsapp_auto_campaign_rules'
+        ordering = ['trigger_event', 'target_days']
+
+    def __str__(self):
+        return f'{self.name} (Day {self.target_days})'
+
+
+class AutoCampaignLog(models.Model):
+    """Tracks when an auto-campaign rule was executed for a customer to prevent spamming."""
+
+    rule = models.ForeignKey(AutoCampaignRule, on_delete=models.CASCADE, related_name='logs')
+    customer = models.ForeignKey('customers.Customer', on_delete=models.CASCADE, related_name='auto_campaign_logs')
+    message = models.ForeignKey(WhatsAppMessage, on_delete=models.SET_NULL, null=True, blank=True)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'whatsapp_auto_campaign_logs'
+        ordering = ['-sent_at']
+        indexes = [
+            models.Index(fields=['customer', 'rule', '-sent_at']),
+        ]
+
+    def __str__(self):
+        return f'Rule {self.rule_id} -> {self.customer.phone} at {self.sent_at.date()}'
 
 
 class FeedbackRequest(models.Model):

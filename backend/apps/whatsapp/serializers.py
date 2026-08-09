@@ -9,6 +9,7 @@ from .models import (
     TriggerType,
     WhatsAppConfig,
     WhatsAppMessage,
+    AutoCampaignRule,
 )
 
 SECRET_FIELDS = ('access_token', 'app_secret')
@@ -133,31 +134,45 @@ class WhatsAppMessageSerializer(serializers.ModelSerializer):
 class CampaignSerializer(serializers.ModelSerializer):
     segment_display = serializers.CharField(source='get_segment_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    created_by_name = serializers.CharField(
-        source='created_by.username', read_only=True, default=None
-    )
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    template_name = serializers.CharField(source='template.name', read_only=True)
 
     class Meta:
         model = Campaign
         fields = [
-            'id', 'name', 'segment', 'segment_display', 'template', 'body',
-            'status', 'status_display', 'recipient_count', 'sent_count', 'failed_count',
-            'sent_at', 'created_by_name', 'created_at',
+            'id', 'name', 'segment', 'segment_display', 'template', 'template_name', 'body', 'status', 'status_display',
+            'scheduled_at', 'recipient_count', 'sent_count', 'failed_count',
+            'sent_at', 'created_by_name', 'created_at'
         ]
-        read_only_fields = [
-            'status', 'recipient_count', 'sent_count', 'failed_count', 'sent_at',
-        ]
+        read_only_fields = ['status', 'recipient_count', 'sent_count', 'failed_count', 'sent_at']
 
     def validate_body(self, value):
-        value = value.strip()
-        if len(value) < 10:
-            raise serializers.ValidationError('Message thoda lamba likho (kam se kam 10 akshar).')
+        if value:
+            value = value.strip()
+            if len(value) < 10:
+                raise serializers.ValidationError('Message thoda lamba likho (kam se kam 10 akshar).')
         return value
 
     def validate_segment(self, value):
         if value not in dict(Segment.choices):
             raise serializers.ValidationError('Yeh segment nahi hai.')
         return value
+
+
+class AutoCampaignRuleSerializer(serializers.ModelSerializer):
+    trigger_event_display = serializers.CharField(source='get_trigger_event_display', read_only=True)
+    template_name = serializers.CharField(source='template.name', read_only=True)
+    created_by_name = serializers.CharField(
+        source='created_by.username', read_only=True, default=None
+    )
+
+    class Meta:
+        model = AutoCampaignRule
+        fields = [
+            'id', 'name', 'trigger_event', 'trigger_event_display', 'target_days',
+            'template', 'template_name', 'is_active', 'created_by_name', 'created_at',
+        ]
+        read_only_fields = ['created_at']
 
 
 class FeedbackRequestSerializer(serializers.ModelSerializer):

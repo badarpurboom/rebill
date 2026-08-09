@@ -15,10 +15,12 @@ from .views import (
     TriggerCatalogueView,
     WebhookView,
     WhatsAppConfigView,
+    AutoCampaignRuleViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'campaigns', CampaignViewSet, basename='campaign')
+router.register(r'auto-campaign-rules', AutoCampaignRuleViewSet, basename='auto-campaign-rule')
 
 urlpatterns = [
     path('config/', WhatsAppConfigView.as_view(), name='whatsapp-config'),

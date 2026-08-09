@@ -12,6 +12,7 @@ __pycache__/
 .env.development.local
 .env.test.local
 .env.production.local
+.deploy/*.local.env
 
 # Build & Dist outputs
 dist/

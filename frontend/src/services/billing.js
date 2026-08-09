@@ -3,7 +3,8 @@ import api from './api'
 export const orders = {
   /** Idempotent — tapping the same table twice lands on the same bill. */
   open: (tableId) => api.post('/billing/orders/open/', { table: tableId }).then((r) => r.data),
-  createTakeaway: () => api.post('/billing/orders/takeaway/').then((r) => r.data),
+  createTakeaway: (tagName = '') =>
+    api.post('/billing/orders/takeaway/', { tag_name: tagName }).then((r) => r.data),
   get: (id) => api.get(`/billing/orders/${id}/`).then((r) => r.data),
   listOpen: () => api.get('/billing/orders/', { params: { open: 'true' } }).then((r) => r.data),
 
@@ -76,10 +77,15 @@ export const kots = {
 export const restaurantSettings = {
   get: () => api.get('/settings/').then((r) => r.data),
   update: (payload) => api.patch('/settings/', payload).then((r) => r.data),
+  generateAIToken: () => api.post('/settings/ai-token/').then((r) => r.data),
+  revokeAIToken: () => api.delete('/settings/ai-token/').then((r) => r.data),
 }
 
 export const PAYMENT_MODES = [
   { value: 'CASH', label: 'Cash', icon: '💵' },
-  { value: 'CARD', label: 'Card', icon: '💳' },
-  { value: 'UPI', label: 'UPI', icon: '📱' },
+  { value: 'UPI', label: 'UPI / QR', icon: '📱' },
+  { value: 'CARD', label: 'Card / POS', icon: '💳' },
+  { value: 'DUE', label: 'Credit / Udhar', icon: '📋' },
+  { value: 'SPLIT', label: 'Split Pay', icon: '🔀' },
+  { value: 'ONLINE', label: 'Online', icon: '🌐' },
 ]
