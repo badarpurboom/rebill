@@ -13,6 +13,38 @@ from apps.customers.models import Customer
 from django.db.models import Sum
 from .authentication import AITokenAuthentication
 
+class AIRootDirectoryView(APIView):
+    """
+    Root endpoint for ChatGPT to discover available AI gateway routes.
+    """
+    permission_classes = []
+    
+    def get(self, request):
+        return Response({
+            "message": "Welcome to the ReBill POS AI Gateway. Please use the following endpoints and authenticate with your secure token in the Authorization: Bearer header.",
+            "endpoints": [
+                {
+                    "url": "/api/ai/sales/summary/",
+                    "description": "Get high-level dashboard metrics for today, week, or month.",
+                    "method": "GET"
+                },
+                {
+                    "url": "/api/ai/sales/daily/",
+                    "description": "Get detailed daily sales breakdown including top items and payment modes.",
+                    "method": "GET"
+                },
+                {
+                    "url": "/api/ai/products/top/",
+                    "description": "Get top selling products and categories.",
+                    "method": "GET"
+                },
+                {
+                    "url": "/api/ai/customers/top/",
+                    "description": "Get top customers by LTV and frequency.",
+                    "method": "GET"
+                }
+            ]
+        })
 
 class AISalesSummaryView(APIView):
     """
