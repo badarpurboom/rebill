@@ -12,6 +12,7 @@ export default function Settings() {
   const [config, setConfig] = useState(null)
   const [activeTab, setActiveTab] = useState('general')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isCopying, setIsCopying] = useState(false)
 
   const {
     register,
@@ -336,89 +337,116 @@ export default function Settings() {
           <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-6">
             <div>
               <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                🤖 Connect My POS to AI
+                🤖 AI Assistant for Your Restaurant
               </h2>
               <p className="mt-1 text-sm font-medium text-slate-500 max-w-2xl">
-                Generate a secure token to connect your POS with ChatGPT, Claude, or other AI assistants. 
-                They will have read-only access to answer questions about your sales, inventory, and customers.
+                Apne aaj/kal ke sales data ko ek click mein copy karein aur ChatGPT mein paste karke koi bhi sawaal puchein — bilkul free!
               </p>
             </div>
 
-            {!config?.ai_connection_token ? (
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-                <p className="text-sm font-bold text-slate-600 mb-4">No AI connection token generated yet.</p>
-                <Button 
+            {/* STEP 1 - Copy Daily Report */}
+            <div className="rounded-2xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50 p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 text-white text-xs font-black">1</span>
+                <p className="text-sm font-black text-emerald-900">📊 Aaj/Kal ka Report Copy Karein (FREE)</p>
+              </div>
+              <p className="text-xs font-medium text-emerald-700 ml-9">
+                Yeh button aapke POS se live data uthayega — Sales, Top Dishes, Payment — aur ek ready-made report banayega jo aap seedha ChatGPT mein paste kar sakte hain.
+              </p>
+              <div className="ml-9">
+                <Button
                   onClick={async () => {
                     try {
-                      setIsGenerating(true)
-                      await restaurantSettings.generateAIToken()
-                      const updated = await restaurantSettings.get()
-                      setConfig(updated)
-                      toast.success("AI Token Generated")
+                      setIsCopying(true)
+                      const res = await fetch('/api/ai/text-report/')
+                      const data = await res.json()
+                      await navigator.clipboard.writeText(data.report)
+                      toast.success('✅ Report copy ho gayi! Ab ChatGPT mein paste karein.')
                     } catch (e) {
-                      toast.error("Failed to generate token")
+                      toast.error('Report copy karne mein error aaya')
                     } finally {
-                      setIsGenerating(false)
+                      setIsCopying(false)
                     }
                   }}
-                  loading={isGenerating}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl"
+                  loading={isCopying}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 px-6"
                 >
-                  Generate Secure AI Token
+                  {isCopying ? 'Data fetch ho raha hai...' : '📋 Copy Today\'s Report for ChatGPT'}
                 </Button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 space-y-3">
-                  <p className="text-xs font-black text-indigo-800 uppercase tracking-wider">Your Secret AI Connection Prompt</p>
-                  <p className="text-sm font-medium text-indigo-900">
-                    Copy the text below and paste it directly into ChatGPT or your favorite AI.
-                  </p>
-                  
-                  <div className="relative group">
-                    <pre className="bg-slate-900 text-slate-50 p-4 rounded-xl text-sm font-mono overflow-x-auto border border-slate-800 whitespace-pre-wrap">
-{`My Restaurant POS is connected here:
-${window.location.origin}/api/ai/
+            </div>
 
-Use this connection to answer my questions about sales, products, and customers.
-Always use my POS data when answering business-related questions.
+            {/* STEP 2 - Paste in ChatGPT */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-400 text-white text-xs font-black">2</span>
+                <p className="text-sm font-black text-slate-700">ChatGPT mein paste karein aur sawaal puchein</p>
+              </div>
+              <div className="ml-9 bg-white rounded-xl border border-slate-200 p-3">
+                <p className="text-xs font-mono text-slate-500 italic">Example: "Aaj ki total sale kitni hui? Aur kal se kitna zyada ya kam?"</p>
+              </div>
+            </div>
 
-My secure connection token is: ${config.ai_connection_token}`}
-                    </pre>
-                    <button 
+            {/* Token section */}
+            <div className="border-t border-slate-100 pt-5 space-y-3">
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Advanced: Direct API Connection Token</p>
+              {!config?.ai_connection_token ? (
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={async () => {
+                      try {
+                        setIsGenerating(true)
+                        await restaurantSettings.generateAIToken()
+                        const updated = await restaurantSettings.get()
+                        setConfig(updated)
+                        toast.success('AI Token Generated')
+                      } catch (e) {
+                        toast.error('Failed to generate token')
+                      } finally {
+                        setIsGenerating(false)
+                      }
+                    }}
+                    loading={isGenerating}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl text-sm"
+                  >
+                    Generate Secure Token
+                  </Button>
+                  <p className="text-xs text-slate-400">(ChatGPT Plus Custom GPT ke liye)</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <code className="block bg-slate-900 text-emerald-400 p-3 rounded-xl text-xs font-mono pr-20 break-all">{config.ai_connection_token}</code>
+                    <button
                       onClick={() => {
-                        const text = `My Restaurant POS is connected here:\n${window.location.origin}/api/ai/\n\nUse this connection to answer my questions about sales, products, and customers.\nAlways use my POS data when answering business-related questions.\n\nMy secure connection token is: ${config.ai_connection_token}`
-                        navigator.clipboard.writeText(text)
-                        toast.success("Copied to clipboard!")
+                        navigator.clipboard.writeText(config.ai_connection_token)
+                        toast.success('Token copied!')
                       }}
-                      className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white rounded-lg p-2 text-xs font-bold backdrop-blur-sm transition-all"
+                      className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white rounded-lg px-2 py-1 text-xs font-bold"
+                    >Copy</button>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('Are you sure? This will disconnect any active AI connections.')) {
+                          try {
+                            await restaurantSettings.revokeAIToken()
+                            const updated = await restaurantSettings.get()
+                            setConfig(updated)
+                            toast.success('AI Token Revoked')
+                          } catch (e) {
+                            toast.error('Failed to revoke token')
+                          }
+                        }
+                      }}
+                      className="text-xs font-bold text-rose-500 hover:text-rose-600 hover:underline"
                     >
-                      📋 Copy
+                      Revoke Token
                     </button>
                   </div>
                 </div>
-
-                <div className="flex justify-end pt-4 border-t border-slate-100">
-                  <button 
-                    onClick={async () => {
-                      if (window.confirm("Are you sure? This will disconnect any active AI connections.")) {
-                        try {
-                          await restaurantSettings.revokeAIToken()
-                          const updated = await restaurantSettings.get()
-                          setConfig(updated)
-                          toast.success("AI Token Revoked")
-                        } catch (e) {
-                          toast.error("Failed to revoke token")
-                        }
-                      }
-                    }}
-                    className="text-xs font-bold text-rose-500 hover:text-rose-600 hover:underline px-3 py-1.5"
-                  >
-                    Revoke Connection
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>

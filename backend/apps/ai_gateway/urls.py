@@ -5,6 +5,7 @@ from .views import (
     AIDailyReportView,
     AITopProductsView,
     AITopCustomersView,
+    AITextReportView,
 )
 
 urlpatterns = [
@@ -13,4 +14,5 @@ urlpatterns = [
     path('sales/daily/', AIDailyReportView.as_view(), name='ai-sales-daily'),
     path('products/top/', AITopProductsView.as_view(), name='ai-top-products'),
     path('customers/top/', AITopCustomersView.as_view(), name='ai-top-customers'),
+    path('text-report/', AITextReportView.as_view(), name='ai-text-report'),
 ]
