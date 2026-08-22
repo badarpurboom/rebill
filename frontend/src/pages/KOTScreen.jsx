@@ -27,6 +27,10 @@ export default function KOTScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'table'
 
+  // Pagination state for History
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(12)
+
   // Printing modal
   const [printing, setPrinting] = useState(null)
 
@@ -54,6 +58,7 @@ export default function KOTScreen() {
   // ── Load History Tickets ─────────────────────────────────────────────
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true)
+    setPage(1) // Reset to first page on reload/filter
     try {
       const params = { history: 'true' }
 
@@ -112,6 +117,15 @@ export default function KOTScreen() {
       loadHistory()
     }
   }, [activeTab, datePreset, statusFilter, loadHistory])
+
+  // Paginated History Data Calculation
+  const totalCount = historyRows ? historyRows.length : 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+  const paginatedRows = useMemo(() => {
+    if (!historyRows) return []
+    const start = (page - 1) * pageSize
+    return historyRows.slice(start, start + pageSize)
+  }, [historyRows, page, pageSize])
 
   // Export CSV for KOT History
   const exportHistoryCSV = () => {
@@ -276,7 +290,10 @@ export default function KOTScreen() {
                 ].map((preset) => (
                   <button
                     key={preset.id}
-                    onClick={() => setDatePreset(preset.id)}
+                    onClick={() => {
+                      setDatePreset(preset.id)
+                      setPage(1)
+                    }}
                     className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                       datePreset === preset.id
                         ? 'bg-slate-900 text-white shadow-xs'
@@ -335,7 +352,10 @@ export default function KOTScreen() {
                   <input
                     type="date"
                     value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    onChange={(e) => {
+                      setStartDate(e.target.value)
+                      setPage(1)
+                    }}
                     className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-800"
                   />
                 </div>
@@ -344,7 +364,10 @@ export default function KOTScreen() {
                   <input
                     type="date"
                     value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    onChange={(e) => {
+                      setEndDate(e.target.value)
+                      setPage(1)
+                    }}
                     className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-800"
                   />
                 </div>
@@ -368,7 +391,10 @@ export default function KOTScreen() {
                   type="text"
                   placeholder="Search KOT #, Table, Item name, Staff..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setPage(1)
+                  }}
                   onKeyDown={(e) => e.key === 'Enter' && loadHistory()}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-3 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 />
@@ -378,7 +404,10 @@ export default function KOTScreen() {
               <div className="flex items-center gap-2">
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value)
+                    setPage(1)
+                  }}
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
                 >
                   <option value="ALL">All Statuses</option>
@@ -440,7 +469,7 @@ export default function KOTScreen() {
               {/* Grid View */}
               {viewMode === 'grid' && (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {historyRows.map((kot) => (
+                  {paginatedRows.map((kot) => (
                     <HistoryKOTCard key={kot.id} kot={kot} onPrint={() => setPrinting(kot)} />
                   ))}
                 </div>
@@ -463,9 +492,8 @@ export default function KOTScreen() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {historyRows.map((kot) => {
+                        {paginatedRows.map((kot) => {
                           const dt = new Date(kot.created_at)
-                          const totalItems = kot.items.reduce((s, i) => s + i.quantity, 0)
                           return (
                             <tr key={kot.id} className="hover:bg-slate-50/70 transition-colors">
                               <td className="px-4 py-3 font-black text-slate-900">
@@ -506,6 +534,74 @@ export default function KOTScreen() {
                         })}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Pagination Controls Bar ── */}
+              {totalCount > pageSize && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-xs">
+                  <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-500">
+                    <span>
+                      Showing <strong className="text-slate-900">{(page - 1) * pageSize + 1}</strong> to{' '}
+                      <strong className="text-slate-900">{Math.min(page * pageSize, totalCount)}</strong> of{' '}
+                      <strong className="text-slate-900">{totalCount}</strong> tickets
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-[11px] font-bold text-slate-400 uppercase">Per page:</label>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value))
+                          setPage(1)
+                        }}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-700 focus:outline-hidden"
+                      >
+                        <option value={12}>12</option>
+                        <option value={24}>24</option>
+                        <option value={48}>48</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-center sm:self-auto">
+                    <button
+                      disabled={page === 1}
+                      onClick={() => setPage(1)}
+                      title="First Page"
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs"
+                    >
+                      «
+                    </button>
+                    <button
+                      disabled={page === 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs"
+                    >
+                      Previous
+                    </button>
+
+                    <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-800 border border-slate-200">
+                      Page {page} of {totalPages}
+                    </span>
+
+                    <button
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs"
+                    >
+                      Next
+                    </button>
+                    <button
+                      disabled={page >= totalPages}
+                      onClick={() => setPage(totalPages)}
+                      title="Last Page"
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs"
+                    >
+                      »
+                    </button>
                   </div>
                 </div>
               )}
