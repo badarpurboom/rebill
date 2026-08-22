@@ -67,5 +67,5 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
-          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: python .github/scripts/deploy_vps.py

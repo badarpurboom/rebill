@@ -1,67 +1,89 @@
 import os
 import sys
 import paramiko
+import io
 
-# Reconfigure stdout/stderr to utf-8 safely
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-
-def safe_str(val):
-    if isinstance(val, bytes):
-        val = val.decode('utf-8', errors='replace')
-    return val.encode('ascii', errors='replace').decode('ascii')
+def safe_print(val):
+    try:
+        print(val)
+    except Exception:
+        print(str(val).encode('ascii', errors='replace').decode('ascii'))
 
 host = os.environ.get("VPS_HOST", "200.141.11.187").strip()
 user = os.environ.get("VPS_USERNAME", "root").strip()
-password = os.environ.get("VPS_PASSWORD", "").strip()
+ssh_key_str = os.environ.get("SSH_PRIVATE_KEY", "").strip()
 
-if not password:
-    print("ERROR: VPS_PASSWORD environment variable is empty. Please check GitHub Secrets!")
+if not ssh_key_str:
+    safe_print("ERROR: SSH_PRIVATE_KEY environment variable is empty. Add it to GitHub Secrets!")
     sys.exit(1)
 
-print(safe_str(f"Connecting to VPS {host} as {user}..."))
+safe_print(f"Connecting to VPS {host} as {user} via SSH key...")
+
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 try:
-    client.connect(host, username=user, password=password, timeout=30)
-    print(safe_str("Connected successfully to VPS!\n"))
+    pkey = paramiko.RSAKey.from_private_key(io.StringIO(ssh_key_str))
+    client.connect(host, username=user, pkey=pkey, timeout=30)
+    safe_print("Connected successfully to VPS!\n")
 
     commands = [
-        ("cd /var/www/rebill && git fetch origin main && git reset --hard origin/main && git pull origin main", "Pulling latest code from GitHub..."),
-        ("cd /var/www/rebill/frontend && npm install --silent", "Installing frontend dependencies..."),
-        ("cd /var/www/rebill/frontend && npm run build", "Building frontend..."),
-        ("cd /var/www/rebill/backend && source venv/bin/activate && pip install -r requirements.txt --quiet && python manage.py migrate --noinput", "Running Django migrations..."),
-        ("systemctl restart rebill-backend", "Restarting backend service..."),
-        ("systemctl reload nginx", "Reloading Nginx..."),
-        ("systemctl is-active rebill-backend && systemctl is-active nginx", "Checking active services...")
+        (
+            "cd /var/www/rebill && git fetch origin main && git reset --hard origin/main && git pull origin main",
+            "Pulling latest code from GitHub..."
+        ),
+        (
+            "cd /var/www/rebill/frontend && npm install --silent",
+            "Installing frontend dependencies..."
+        ),
+        (
+            "cd /var/www/rebill/frontend && npm run build",
+            "Building frontend..."
+        ),
+        (
+            "cd /var/www/rebill/backend && source venv/bin/activate && pip install -r requirements.txt --quiet && python manage.py migrate --noinput",
+            "Running Django migrations..."
+        ),
+        (
+            "systemctl restart rebill-backend",
+            "Restarting backend service..."
+        ),
+        (
+            "systemctl reload nginx",
+            "Reloading Nginx..."
+        ),
+        (
+            "systemctl is-active rebill-backend && systemctl is-active nginx",
+            "Checking active services..."
+        ),
     ]
 
     for cmd, description in commands:
-        print(safe_str(f"[>>] {description}"))
+        safe_print(f"[>>] {description}")
         stdin, stdout, stderr = client.exec_command(cmd, timeout=180)
         exit_code = stdout.channel.recv_exit_status()
         out = stdout.read().decode('utf-8', errors='replace').strip()
         err = stderr.read().decode('utf-8', errors='replace').strip()
 
         if out:
-            print(safe_str(f"    {out[:500]}"))
+            safe_print(f"    {out[:500]}")
         if exit_code != 0:
-            print(safe_str(f"    ERROR (exit code {exit_code}): {err[:500]}"))
+            safe_print(f"    ERROR (exit {exit_code}): {err[:500]}")
             if "systemctl" not in cmd and "is-active" not in cmd:
-                print(safe_str(f"Deployment failed at step: {description}"))
+                safe_print(f"Deployment failed at: {description}")
                 sys.exit(exit_code)
         else:
-            print(safe_str("    OK"))
+            safe_print("    OK")
 
-    print(safe_str("\n=========================================="))
-    print(safe_str("DEPLOYMENT COMPLETE! App is live on VPS!"))
-    print(safe_str("=========================================="))
+    safe_print("\n==========================================")
+    safe_print("DEPLOYMENT COMPLETE! App is live on VPS!")
+    safe_print("==========================================")
 
+except paramiko.AuthenticationException:
+    safe_print("ERROR: SSH key authentication failed. Check SSH_PRIVATE_KEY secret.")
+    sys.exit(1)
 except Exception as e:
-    print(safe_str(f"SSH Exception: {e}"))
+    safe_print(f"ERROR: {e}")
     sys.exit(1)
 finally:
     client.close()
