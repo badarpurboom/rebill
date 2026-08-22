@@ -52,20 +52,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Python for SSH Deployment
-        uses: actions/setup-python@v5
+      - name: SSH Deploy to VPS
+        uses: appleboy/ssh-action@v1.2.0
         with:
-          python-version: '3.12'
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          command_timeout: 10m
+          script: |
+            set -e
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-      - name: Install Paramiko
-        run: pip install paramiko
+            echo "=== [1/5] Git Pull ==="
+            cd /var/www/rebill
+            git fetch origin main
+            git reset --hard origin/main
 
-      - name: Execute VPS Deployment Script
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        run: python .github/scripts/deploy_vps.py
+            echo "=== [2/5] Frontend Build ==="
+            cd /var/www/rebill/frontend
+            npm install --silent
+            npm run build
+
+            echo "=== [3/5] Backend Dependencies & Migrations ==="
+            cd /var/www/rebill/backend
+            . venv/bin/activate
+            pip install -r requirements.txt -q
+            python manage.py migrate --noinput
+
+            echo "=== [4/5] Restart Services ==="
+            systemctl restart rebill-backend
+            systemctl reload nginx
+
+            echo "=== [5/5] Health Check ==="
+            systemctl is-active rebill-backend
+            systemctl is-active nginx
+
+            echo "DEPLOYMENT COMPLETE!"
