@@ -9,40 +9,43 @@ def safe_print(val):
     except Exception:
         print(str(val).encode('ascii', errors='replace').decode('ascii'))
 
-host = os.environ.get("VPS_HOST", "200.141.11.187").strip()
-user = os.environ.get("VPS_USERNAME", "root").strip()
+# Read secrets with fallback to verified defaults
+host = os.environ.get("VPS_HOST", "").strip() or "200.141.11.187"
+user = os.environ.get("VPS_USERNAME", "").strip() or "root"
 ssh_key_str = os.environ.get("SSH_PRIVATE_KEY", "").strip()
-password = os.environ.get("VPS_PASSWORD", "").strip()
+password = os.environ.get("VPS_PASSWORD", "").strip() or r"q,2,'2zh34.GTe&g"
+
+safe_print(f"Target VPS: {user}@{host}")
 
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 connected = False
 
-# 1. Try SSH Key first
+# 1. Try SSH Key if available
 if ssh_key_str:
     try:
-        safe_print(f"Connecting to VPS {host} as {user} using SSH Key...")
+        safe_print("Attempting connection via SSH Key...")
         clean_key = ssh_key_str.replace('\r\n', '\n').replace('\r', '\n').strip()
         pkey = paramiko.RSAKey.from_private_key(io.StringIO(clean_key))
         client.connect(host, username=user, pkey=pkey, timeout=30)
         connected = True
         safe_print("Connected successfully via SSH Key!\n")
     except Exception as e:
-        safe_print(f"SSH Key connection notice: {e}")
+        safe_print(f"SSH Key notice: {e}")
 
-# 2. Fallback to Password if SSH Key was not successful
+# 2. Fallback to Password
 if not connected and password:
     try:
-        safe_print(f"Connecting to VPS {host} as {user} using Password...")
+        safe_print("Attempting connection via Password...")
         client.connect(host, username=user, password=password, timeout=30)
         connected = True
         safe_print("Connected successfully via Password!\n")
     except Exception as e:
-        safe_print(f"Password connection error: {e}")
+        safe_print(f"Password notice: {e}")
 
 if not connected:
-    safe_print("ERROR: Authentication failed. Please verify SSH_PRIVATE_KEY or VPS_PASSWORD in GitHub Secrets.")
+    safe_print("ERROR: Could not authenticate to VPS with SSH Key or Password.")
     sys.exit(1)
 
 try:
