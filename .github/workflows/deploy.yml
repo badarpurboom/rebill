@@ -52,39 +52,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Execute Remote SSH Commands
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python for SSH Deployment
+        uses: actions/setup-python@v5
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          password: ${{ secrets.VPS_PASSWORD }}
-          port: 22
-          command_timeout: 15m
-          script: |
-            export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
-            echo "Starting deployment on VPS..."
+          python-version: '3.12'
 
-            cd /var/www/rebill || exit 1
-            git config --global --add safe.directory /var/www/rebill
-            git fetch origin main || true
-            git reset --hard origin/main || true
-            git pull origin main || true
+      - name: Install Paramiko
+        run: pip install paramiko
 
-            echo "Building frontend..."
-            cd /var/www/rebill/frontend || exit 1
-            npm install --silent
-            npm run build
-
-            echo "Updating backend..."
-            cd /var/www/rebill/backend || exit 1
-            if [ -d "venv" ]; then
-              source venv/bin/activate
-            fi
-            pip install -r requirements.txt --quiet
-            python manage.py migrate --noinput
-
-            echo "Restarting services..."
-            systemctl restart rebill-backend || true
-            systemctl reload nginx || true
-
-            echo "Deployment completed successfully!"
+      - name: Execute VPS Deployment Script
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+        run: python .github/scripts/deploy_vps.py
