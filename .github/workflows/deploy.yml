@@ -52,40 +52,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: SSH Deploy to VPS
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          command_timeout: 10m
-          script: |
-            set -e
-            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      - name: Deploy to VPS via Native SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USERNAME }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
 
-            echo "=== [1/5] Git Pull ==="
-            cd /var/www/rebill
-            git fetch origin main
-            git reset --hard origin/main
+          TARGET_HOST="${VPS_HOST:-200.141.11.187}"
+          TARGET_USER="${VPS_USER:-root}"
 
-            echo "=== [2/5] Frontend Build ==="
-            cd /var/www/rebill/frontend
-            npm install --silent
-            npm run build
+          echo "Target VPS: $TARGET_USER@$TARGET_HOST"
 
-            echo "=== [3/5] Backend Dependencies & Migrations ==="
-            cd /var/www/rebill/backend
-            . venv/bin/activate
-            pip install -r requirements.txt -q
-            python manage.py migrate --noinput
+          DEPLOY_CMD="set -e; export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'; cd /var/www/rebill; git fetch origin main; git reset --hard origin/main; cd frontend; npm install --silent; npm run build; cd ../backend; if [ -d 'venv' ]; then source venv/bin/activate; fi; pip install -r requirements.txt --quiet; python manage.py migrate --noinput; systemctl restart rebill-backend; systemctl reload nginx; systemctl is-active rebill-backend; systemctl is-active nginx; echo 'DEPLOYMENT SUCCESSFUL!'"
 
-            echo "=== [4/5] Restart Services ==="
-            systemctl restart rebill-backend
-            systemctl reload nginx
+          AUTH_SUCCESS=0
 
-            echo "=== [5/5] Health Check ==="
-            systemctl is-active rebill-backend
-            systemctl is-active nginx
+          # 1. Try SSH Key if available
+          if [ -n "$SSH_KEY" ]; then
+            echo "Setting up SSH Key..."
+            mkdir -p ~/.ssh
+            printf "%s\n" "$SSH_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            if ssh -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$TARGET_USER@$TARGET_HOST" "echo Connected via SSH Key" 2>/dev/null; then
+              echo "Executing deployment via SSH Key..."
+              ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no "$TARGET_USER@$TARGET_HOST" "$DEPLOY_CMD"
+              AUTH_SUCCESS=1
+            else
+              echo "SSH Key authentication failed, falling back to password..."
+            fi
+          fi
 
-            echo "DEPLOYMENT COMPLETE!"
+          # 2. Try Password with sshpass if SSH Key was not used or failed
+          if [ "$AUTH_SUCCESS" -eq 0 ]; then
+            if [ -n "$VPS_PASSWORD" ]; then
+              echo "Executing deployment via SSH Password..."
+              sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$TARGET_USER@$TARGET_HOST" "$DEPLOY_CMD"
+              AUTH_SUCCESS=1
+            fi
+          fi
+
+          if [ "$AUTH_SUCCESS" -eq 0 ]; then
+            echo "ERROR: Could not authenticate to VPS with SSH Key or Password."
+            exit 1
+          fi
