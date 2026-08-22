@@ -71,7 +71,7 @@ export const BILL_STATUS_TONE = {
 }
 
 export const kots = {
-  list: () => api.get('/billing/kots/').then((r) => r.data),
+  list: (params) => api.get('/billing/kots/', { params }).then((r) => r.data),
 }
 
 export const restaurantSettings = {

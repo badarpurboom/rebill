@@ -71,11 +71,19 @@ class KOTSerializer(serializers.ModelSerializer):
     items = KOTItemSerializer(many=True, read_only=True)
     table_number = serializers.CharField(source='order.table.number', read_only=True, default='Takeaway')
     tag_name = serializers.CharField(source='order.tag_name', read_only=True, default='')
+    order_status = serializers.CharField(source='order.status', read_only=True)
+    order_status_display = serializers.CharField(source='order.get_status_display', read_only=True)
+    order_type = serializers.CharField(source='order.order_type', read_only=True)
+    order_type_display = serializers.CharField(source='order.get_order_type_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
 
     class Meta:
         model = KOT
-        fields = ['id', 'number', 'order', 'table_number', 'tag_name', 'created_by_name', 'created_at', 'items']
+        fields = [
+            'id', 'number', 'order', 'table_number', 'tag_name',
+            'order_status', 'order_status_display', 'order_type', 'order_type_display',
+            'created_by_name', 'created_at', 'items',
+        ]
 
 
 MONEY_FIELDS = [

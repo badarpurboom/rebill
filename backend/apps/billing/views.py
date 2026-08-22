@@ -728,7 +728,7 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class KOTListView(ListAPIView):
-    """Kitchen screen. Waiters may read this — it is the only billing data
+    """Kitchen screen and KOT history. Waiters may read this — it is the only billing data
     their role can see."""
 
     serializer_class = KOTSerializer
@@ -737,8 +737,40 @@ class KOTListView(ListAPIView):
 
     def get_queryset(self):
         qs = KOT.objects.select_related('order__table', 'created_by').prefetch_related('items')
-        # Only show active tickets: must have items and order must be running.
-        qs = qs.filter(items__isnull=False, order__status=OrderStatus.RUNNING).distinct()
-        if self.request.query_params.get('today') != 'false':
-            qs = qs.filter(created_at__date=timezone.localdate())
-        return qs[:100]
+        is_history = self.request.query_params.get('history') == 'true'
+
+        if not is_history:
+            # Active tickets only: must have items and order must be running.
+            qs = qs.filter(items__isnull=False, order__status=OrderStatus.RUNNING).distinct()
+            if self.request.query_params.get('today') != 'false':
+                qs = qs.filter(created_at__date=timezone.localdate())
+            return qs[:100]
+
+        # ── History filters ──────────────────────────────────────────────
+        if order_status := self.request.query_params.get('status'):
+            if order_status.upper() != 'ALL':
+                qs = qs.filter(order__status=order_status.upper())
+
+        if date_str := self.request.query_params.get('date'):
+            qs = qs.filter(created_at__date=date_str)
+        else:
+            if start_date := self.request.query_params.get('start_date'):
+                qs = qs.filter(created_at__date__gte=start_date)
+            if end_date := self.request.query_params.get('end_date'):
+                qs = qs.filter(created_at__date__lte=end_date)
+            if not start_date and not end_date and self.request.query_params.get('all_time') != 'true':
+                qs = qs.filter(created_at__date=timezone.localdate())
+
+        if table := self.request.query_params.get('table'):
+            qs = qs.filter(Q(order__table__number=table) | Q(order__table_id=table))
+
+        if search := (self.request.query_params.get('search') or '').strip():
+            qs = qs.filter(
+                Q(number__icontains=search)
+                | Q(order__table__number__icontains=search)
+                | Q(order__tag_name__icontains=search)
+                | Q(items__item_name__icontains=search)
+                | Q(created_by__username__icontains=search)
+            ).distinct()
+
+        return qs[:300]
