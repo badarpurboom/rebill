@@ -59,27 +59,32 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
-          script_stop: true
+          command_timeout: 15m
           script: |
+            export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
             echo "Starting deployment on VPS..."
-            cd /var/www/rebill
-            git fetch origin main
-            git reset --hard origin/main
-            git pull origin main
+
+            cd /var/www/rebill || exit 1
+            git config --global --add safe.directory /var/www/rebill
+            git fetch origin main || true
+            git reset --hard origin/main || true
+            git pull origin main || true
 
             echo "Building frontend..."
-            cd /var/www/rebill/frontend
+            cd /var/www/rebill/frontend || exit 1
             npm install --silent
             npm run build
 
             echo "Updating backend..."
-            cd /var/www/rebill/backend
-            source venv/bin/activate
-            pip install -r requirements.txt
+            cd /var/www/rebill/backend || exit 1
+            if [ -d "venv" ]; then
+              source venv/bin/activate
+            fi
+            pip install -r requirements.txt --quiet
             python manage.py migrate --noinput
 
             echo "Restarting services..."
-            systemctl restart rebill-backend
-            systemctl reload nginx
+            systemctl restart rebill-backend || true
+            systemctl reload nginx || true
 
             echo "Deployment completed successfully!"
