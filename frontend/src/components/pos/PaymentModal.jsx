@@ -212,19 +212,39 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
     )
   }
 
-  const due = paid ? bill.net_payable : (totals?.net_payable ?? totals?.total ?? bill?.net_payable ?? 0)
-  const hasRedeem = paid ? Number(bill.redeem_amount) > 0 : Number(totals?.redeem_amount) > 0
+  // Real-time Subtotal calculated directly from items
+  const liveItemsSubtotal = order?.items?.length > 0
+    ? order.items.reduce((sum, it) => sum + (Number(it.unit_price || 0) * Number(it.quantity || 0)), 0)
+    : Number(order?.subtotal || 0)
+
+  const parsedSubtotal = Number(paid ? bill.subtotal : liveItemsSubtotal)
+  const discountPct = Number(discount || 0)
   
-  const displaySubtotal = paid ? bill.subtotal : (totals?.subtotal ?? bill?.subtotal)
-  const displayDiscountAmount = paid ? bill.discount_amount : (totals?.discount_amount ?? bill?.discount_amount)
-  const displayDiscountPercent = paid ? bill.discount_percent : (totals?.discount_percent ?? bill?.discount_percent ?? discount)
-  const displayCgstPercent = paid ? bill.cgst_percent : (totals?.cgst_percent ?? bill?.cgst_percent)
-  const displayCgstAmount = paid ? bill.cgst_amount : (totals?.cgst_amount ?? bill?.cgst_amount)
-  const displaySgstPercent = paid ? bill.sgst_percent : (totals?.sgst_percent ?? bill?.sgst_percent)
-  const displaySgstAmount = paid ? bill.sgst_amount : (totals?.sgst_amount ?? bill?.sgst_amount)
-  const displayGrossTotal = paid ? bill.total : (totals?.total ?? bill?.total)
-  const displayPointsRedeemed = paid ? bill.points_redeemed : (totals?.points_redeemed ?? bill?.points_redeemed)
-  const displayRedeemAmount = paid ? bill.redeem_amount : (totals?.redeem_amount ?? bill?.redeem_amount)
+  // Instant dynamic calculations (0ms lag on keypress)
+  const calcDiscountAmount = (parsedSubtotal * discountPct) / 100
+  const calcTaxable = Math.max(0, parsedSubtotal - calcDiscountAmount)
+  const cgstRate = Number(paid ? bill.cgst_percent : (totals?.cgst_percent ?? settings?.cgst_percent ?? 2.5))
+  const sgstRate = Number(paid ? bill.sgst_percent : (totals?.sgst_percent ?? settings?.sgst_percent ?? 2.5))
+  const calcCgstAmount = (calcTaxable * cgstRate) / 100
+  const calcSgstAmount = (calcTaxable * sgstRate) / 100
+  const calcTotal = calcTaxable + calcCgstAmount + calcSgstAmount
+  const calcPointsRedeemed = Number(paid ? bill.points_redeemed : (totals?.points_redeemed ?? redeemPoints ?? 0))
+  const calcRedeemAmount = Number(paid ? bill.redeem_amount : (totals?.redeem_amount ?? redeemPoints ?? 0))
+  const calcDue = Math.max(0, calcTotal - calcRedeemAmount)
+
+  const due = paid ? bill.net_payable : calcDue.toFixed(2)
+  const hasRedeem = paid ? Number(bill.redeem_amount) > 0 : calcRedeemAmount > 0
+  
+  const displaySubtotal = paid ? bill.subtotal : parsedSubtotal.toFixed(2)
+  const displayDiscountAmount = paid ? bill.discount_amount : calcDiscountAmount.toFixed(2)
+  const displayDiscountPercent = paid ? bill.discount_percent : discountPct.toFixed(1)
+  const displayCgstPercent = cgstRate
+  const displayCgstAmount = paid ? bill.cgst_amount : calcCgstAmount.toFixed(2)
+  const displaySgstPercent = sgstRate
+  const displaySgstAmount = paid ? bill.sgst_amount : calcSgstAmount.toFixed(2)
+  const displayGrossTotal = paid ? bill.total : calcTotal.toFixed(2)
+  const displayPointsRedeemed = calcPointsRedeemed
+  const displayRedeemAmount = calcRedeemAmount.toFixed(2)
 
   const calculatedChange = Number(cashTendered) > 0 ? Number(cashTendered) - Number(due) : 0
 
