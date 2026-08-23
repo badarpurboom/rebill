@@ -6,7 +6,7 @@ import { orders as orderApi, bills as billApi, restaurantSettings, PAYMENT_MODES
 import { errorMessage } from '@/services/api'
 import ThermalBill from '@/components/print/ThermalBill'
 import PrintSlipModal from '@/components/print/PrintSlipModal'
-import { CouponInput, LoyaltyRow } from '@/components/pos/CartPanel'
+import { CouponInput, DiscountInput, LoyaltyRow } from '@/components/pos/CartPanel'
 
 export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
   const [order, setOrder] = useState(initialOrder)
@@ -280,14 +280,20 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
           </div>
         )}
 
-        {/* Coupons & Loyalty */}
+        {/* Discounts, Coupons & Loyalty */}
         {!paid && (
-          <div className="space-y-3">
-            <CouponInput
-              subtotal={displaySubtotal || 0}
-              customerId={order.customer}
-              onApplyDiscount={(val) => setDiscount(val)}
-            />
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <DiscountInput
+                discount={discount}
+                onChangeDiscount={(val) => setDiscount(val)}
+              />
+              <CouponInput
+                subtotal={displaySubtotal || 0}
+                customerId={order.customer}
+                onApplyDiscount={(val) => setDiscount(val)}
+              />
+            </div>
             {order.customer && (
               <LoyaltyRow
                 totals={totals}

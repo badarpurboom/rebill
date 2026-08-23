@@ -360,3 +360,63 @@ export function CouponInput({ subtotal, customerId, onApplyDiscount }) {
     </div>
   )
 }
+
+export function DiscountInput({ discount, onChangeDiscount }) {
+  const PRESET_PERCENTAGES = [5, 10, 15, 20]
+
+  return (
+    <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 p-2.5 h-full">
+      <div className="mb-1 flex items-center justify-between text-xs font-extrabold text-slate-700">
+        <span className="flex items-center gap-1">
+          🏷️ Direct Discount (%)
+        </span>
+        {discount && Number(discount) > 0 && (
+          <button
+            type="button"
+            onClick={() => onChangeDiscount('')}
+            className="text-[10px] font-bold text-rose-600 hover:underline"
+          >
+            Clear ({discount}%)
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5 mt-auto">
+        <div className="relative flex-1 min-w-0">
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="0.5"
+            value={discount}
+            onChange={(e) => onChangeDiscount(e.target.value)}
+            placeholder="0"
+            className="w-full rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 pr-6 font-mono text-xs font-bold text-slate-900 focus:border-rose-500 focus:outline-none"
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">
+            %
+          </span>
+        </div>
+
+        {/* Quick Presets */}
+        <div className="flex gap-1 shrink-0">
+          {PRESET_PERCENTAGES.map((pct) => (
+            <button
+              key={pct}
+              type="button"
+              onClick={() => onChangeDiscount(String(pct))}
+              className={`rounded-lg px-2 py-1.5 text-[10px] font-black transition ${
+                String(discount) === String(pct)
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95'
+              }`}
+            >
+              {pct}%
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
