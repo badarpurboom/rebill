@@ -8,7 +8,7 @@ from django.urls import include, path
 
 
 def health(_request):
-    return JsonResponse({'status': 'ok', 'service': 'rebill-api'})
+    return JsonResponse({'status': 'ok', 'service': 'rebill-api', 'docker': 'enabled'})
 
 
 urlpatterns = [
