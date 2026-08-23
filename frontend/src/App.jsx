@@ -20,6 +20,7 @@ import Feedback from '@/pages/Feedback'
 import WhatsApp from '@/pages/WhatsApp'
 import { hasPermission } from '@/utils/roles'
 
+// Rebill Application Root - CI/CD & Docker Pipeline Test
 export default function App() {
   return (
     <BrowserRouter>
