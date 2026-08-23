@@ -212,7 +212,12 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
     )
   }
 
-  const parsedSubtotal = Number(paid ? bill.subtotal : (totals?.subtotal ?? order?.subtotal ?? 0))
+  // Real-time Subtotal calculated directly from items
+  const liveItemsSubtotal = order?.items?.length > 0
+    ? order.items.reduce((sum, it) => sum + (Number(it.unit_price || 0) * Number(it.quantity || 0)), 0)
+    : Number(order?.subtotal || 0)
+
+  const parsedSubtotal = Number(paid ? bill.subtotal : liveItemsSubtotal)
   const discountPct = Number(discount || 0)
   
   // Instant dynamic calculations (0ms lag on keypress)
