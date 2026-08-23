@@ -64,6 +64,12 @@ if [ ! -f "backend/.env" ]; then
     fi
 fi
 
+# Update DB_HOST to host.docker.internal for container networking
+if [ -f "backend/.env" ]; then
+    sed -i 's/DB_HOST=127.0.0.1/DB_HOST=host.docker.internal/g' backend/.env
+    sed -i 's/DB_HOST=localhost/DB_HOST=host.docker.internal/g' backend/.env
+fi
+
 # Ensure sqlite database file exists if using sqlite
 touch backend/db.sqlite3
 
