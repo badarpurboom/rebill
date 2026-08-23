@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { money } from '@/utils/format'
@@ -77,44 +77,104 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
     return () => { active = false }
   }, [order.id, discount, redeemPoints, paid])
 
-  const handleUpdateItemRate = async (item, newRate) => {
-    if (newRate === '' || isNaN(newRate) || Number(newRate) < 0) return
-    setUpdatingItemId(item.id)
-    try {
-      await orderApi.updateItem(order.id, item.id, { unit_price: newRate })
-      await refreshOrderAndTotals()
-    } catch (err) {
-      setError(errorMessage(err, 'Failed to update item price.'))
-    } finally {
-      setUpdatingItemId(null)
+  // Optimistic & Instant Local Order Recalculation
+  const updateLocalOrderItems = (itemId, updates) => {
+    setOrder((prev) => {
+      if (!prev || !prev.items) return prev
+      let updatedItems
+      if (updates === null) {
+        updatedItems = prev.items.filter((it) => it.id !== itemId)
+      } else {
+        updatedItems = prev.items.map((it) => {
+          if (it.id === itemId) {
+            const newUnitPrice = updates.unit_price !== undefined ? updates.unit_price : it.unit_price
+            const newQty = updates.quantity !== undefined ? updates.quantity : it.quantity
+            const newLineTotal = (Number(newUnitPrice) || 0) * (Number(newQty) || 0)
+            return {
+              ...it,
+              ...updates,
+              unit_price: newUnitPrice,
+              quantity: newQty,
+              line_total: newLineTotal.toFixed(2),
+            }
+          }
+          return it
+        })
+      }
+      const newSubtotal = updatedItems.reduce(
+        (acc, it) => acc + ((Number(it.unit_price) || 0) * (Number(it.quantity) || 0)),
+        0
+      )
+      return {
+        ...prev,
+        items: updatedItems,
+        subtotal: newSubtotal.toFixed(2),
+      }
+    })
+  }
+
+  const rateDebounceRef = useRef({})
+
+  const handleUpdateItemRate = (item, newRate) => {
+    // 1. Instant 0ms UI update
+    updateLocalOrderItems(item.id, { unit_price: newRate })
+
+    // 2. Debounced API save
+    if (rateDebounceRef.current[item.id]) {
+      clearTimeout(rateDebounceRef.current[item.id])
     }
+
+    if (newRate === '' || isNaN(newRate) || Number(newRate) < 0) return
+
+    rateDebounceRef.current[item.id] = setTimeout(async () => {
+      try {
+        await orderApi.updateItem(order.id, item.id, { unit_price: newRate })
+        const preview = await orderApi.preview(order.id, {
+          discount_percent: discount === '' ? '0' : discount,
+          redeem_points: redeemPoints,
+        })
+        setTotals(preview)
+      } catch (err) {
+        console.error('Failed to sync item price:', err)
+      }
+    }, 400)
   }
 
   const handleUpdateItemQty = async (item, newQty) => {
-    setUpdatingItemId(item.id)
+    if (newQty <= 0) {
+      handleRemoveItem(item.id)
+      return
+    }
+    // 1. Instant 0ms UI update
+    updateLocalOrderItems(item.id, { quantity: newQty })
+
+    // 2. Background API save
     try {
-      if (newQty <= 0) {
-        await orderApi.removeItem(order.id, item.id)
-      } else {
-        await orderApi.updateItem(order.id, item.id, { quantity: newQty })
-      }
-      await refreshOrderAndTotals()
+      await orderApi.updateItem(order.id, item.id, { quantity: newQty })
+      const preview = await orderApi.preview(order.id, {
+        discount_percent: discount === '' ? '0' : discount,
+        redeem_points: redeemPoints,
+      })
+      setTotals(preview)
     } catch (err) {
-      setError(errorMessage(err, 'Failed to update item quantity.'))
-    } finally {
-      setUpdatingItemId(null)
+      console.error('Failed to sync item quantity:', err)
     }
   }
 
   const handleRemoveItem = async (itemId) => {
-    setUpdatingItemId(itemId)
+    // 1. Instant 0ms UI remove
+    updateLocalOrderItems(itemId, null)
+
+    // 2. Background API save
     try {
       await orderApi.removeItem(order.id, itemId)
-      await refreshOrderAndTotals()
+      const preview = await orderApi.preview(order.id, {
+        discount_percent: discount === '' ? '0' : discount,
+        redeem_points: redeemPoints,
+      })
+      setTotals(preview)
     } catch (err) {
-      setError(errorMessage(err, 'Failed to remove item.'))
-    } finally {
-      setUpdatingItemId(null)
+      console.error('Failed to remove item:', err)
     }
   }
 
@@ -219,61 +279,64 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
                   Change item rate or quantity if customer disputes prices at checkout:
                 </p>
                 <div className="divide-y divide-amber-200/50 max-h-48 overflow-y-auto">
-                  {order.items?.map((item) => (
-                    <div key={item.id} className="py-1.5 flex items-center justify-between text-xs gap-2">
-                      <div className="min-w-0 flex-1">
-                        <span className="font-medium text-slate-800">{item.item_name}</span>
-                        <span className="text-[10px] text-slate-500 ml-1">({item.portion})</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {/* Rate Edit */}
-                        <div className="flex items-center gap-1">
-                          <span className="text-slate-400">₹</span>
-                          <input
-                            type="number"
-                            step="1"
-                            disabled={updatingItemId === item.id}
-                            defaultValue={item.unit_price}
-                            onBlur={(e) => handleUpdateItemRate(item, e.target.value)}
-                            className="w-16 rounded border border-slate-300 px-1.5 py-0.5 text-right font-medium text-slate-900 bg-white"
-                          />
+                  {order.items?.map((item) => {
+                    const itemLineTotal = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0)
+                    return (
+                      <div key={item.id} className="py-2 flex items-center justify-between text-xs gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-slate-800 truncate">{item.item_name}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {item.portion && `(${item.portion}) `}
+                            <span className="tabular font-bold text-amber-900">Total: ₹{itemLineTotal.toFixed(2)}</span>
+                          </p>
                         </div>
 
-                        {/* Qty Edit */}
-                        <div className="flex items-center rounded border border-slate-300 bg-white">
+                        <div className="flex items-center gap-2">
+                          {/* Rate Edit */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-slate-400 font-bold">₹</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={item.unit_price ?? ''}
+                              onChange={(e) => handleUpdateItemRate(item, e.target.value)}
+                              className="w-16 rounded-lg border border-slate-300 px-1.5 py-1 text-right font-mono font-bold text-slate-900 bg-white focus:border-amber-500 focus:outline-none"
+                            />
+                          </div>
+
+                          {/* Qty Edit */}
+                          <div className="flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateItemQty(item, Number(item.quantity || 1) - 1)}
+                              className="px-2 py-1 text-slate-600 hover:bg-slate-100 font-black active:scale-95"
+                            >
+                              -
+                            </button>
+                            <span className="px-2 font-mono font-black text-slate-800">{item.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateItemQty(item, Number(item.quantity || 1) + 1)}
+                              className="px-2 py-1 text-slate-600 hover:bg-slate-100 font-black active:scale-95"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          {/* Remove */}
                           <button
                             type="button"
-                            disabled={updatingItemId === item.id}
-                            onClick={() => handleUpdateItemQty(item, item.quantity - 1)}
-                            className="px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 font-bold"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition"
+                            title="Remove item"
                           >
-                            -
-                          </button>
-                          <span className="px-1.5 font-semibold text-slate-800">{item.quantity}</span>
-                          <button
-                            type="button"
-                            disabled={updatingItemId === item.id}
-                            onClick={() => handleUpdateItemQty(item, item.quantity + 1)}
-                            className="px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 font-bold"
-                          >
-                            +
+                            🗑️
                           </button>
                         </div>
-
-                        {/* Remove */}
-                        <button
-                          type="button"
-                          disabled={updatingItemId === item.id}
-                          onClick={() => handleRemoveItem(item.id)}
-                          className="p-1 text-rose-500 hover:bg-rose-50 rounded"
-                          title="Remove item"
-                        >
-                          🗑️
-                        </button>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
