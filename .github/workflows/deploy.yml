@@ -15,6 +15,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Prepare Environment
+        run: |
+          if [ -f "backend/.env.example" ]; then
+            cp backend/.env.example backend/.env
+          else
+            touch backend/.env
+          fi
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
