@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline (Docker)
 
 on:
   push:
@@ -21,15 +21,11 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
-      - name: Install Backend Dependencies
+      - name: Install Backend Dependencies & Check
         run: |
           cd backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Run Django System Checks
-        run: |
-          cd backend
           python manage.py check
 
       - name: Setup Node.js
@@ -45,8 +41,12 @@ jobs:
           npm ci || npm install
           npm run build
 
+      - name: Verify Docker Compose Configuration
+        run: |
+          docker compose config
+
   deploy-to-vps:
-    name: Deploy to VPS (CD)
+    name: Deploy to VPS with Docker (CD)
     needs: test-and-build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -63,7 +63,7 @@ jobs:
       - name: Install Paramiko
         run: pip install paramiko
 
-      - name: Execute VPS Deployment Script
+      - name: Execute VPS Docker Deployment
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USERNAME: ${{ secrets.VPS_USERNAME }}

@@ -55,51 +55,34 @@ try:
             "Pulling latest code from GitHub..."
         ),
         (
-            "cd /var/www/rebill/frontend && npm install --silent",
-            "Installing frontend dependencies..."
+            "cd /var/www/rebill && docker compose up --build -d --remove-orphans",
+            "Building & restarting Docker containers (Backend + Frontend + Nginx)..."
         ),
         (
-            "cd /var/www/rebill/frontend && npm run build",
-            "Building frontend..."
-        ),
-        (
-            "cd /var/www/rebill/backend && source venv/bin/activate && pip install -r requirements.txt --quiet && python manage.py migrate --noinput",
-            "Running Django migrations..."
-        ),
-        (
-            "systemctl restart rebill-backend",
-            "Restarting backend service..."
-        ),
-        (
-            "systemctl reload nginx",
-            "Reloading Nginx..."
-        ),
-        (
-            "systemctl is-active rebill-backend && systemctl is-active nginx",
-            "Checking active services..."
+            "docker ps --filter 'name=rebill' --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'",
+            "Verifying running Docker containers..."
         ),
     ]
 
     for cmd, description in commands:
         safe_print(f"[>>] {description}")
-        stdin, stdout, stderr = client.exec_command(cmd, timeout=180)
+        stdin, stdout, stderr = client.exec_command(cmd, timeout=300)
         exit_code = stdout.channel.recv_exit_status()
         out = stdout.read().decode('utf-8', errors='replace').strip()
         err = stderr.read().decode('utf-8', errors='replace').strip()
 
         if out:
-            safe_print(f"    {out[:500]}")
+            safe_print(f"    {out[:1000]}")
         if exit_code != 0:
             safe_print(f"    ERROR (exit {exit_code}): {err[:500]}")
-            if "systemctl" not in cmd and "is-active" not in cmd:
-                safe_print(f"Deployment failed at: {description}")
-                sys.exit(exit_code)
+            safe_print(f"Deployment failed at: {description}")
+            sys.exit(exit_code)
         else:
             safe_print("    OK")
 
-    safe_print("\n==========================================")
-    safe_print("DEPLOYMENT COMPLETE! App is live on VPS!")
-    safe_print("==========================================")
+    safe_print("\n=======================================================")
+    safe_print("DOCKER DEPLOYMENT COMPLETE! App is live on VPS!")
+    safe_print("=======================================================")
 
 finally:
     client.close()
