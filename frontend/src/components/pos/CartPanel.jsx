@@ -361,8 +361,12 @@ export function CouponInput({ subtotal, customerId, onApplyDiscount }) {
   )
 }
 
-export function DiscountInput({ discount, onChangeDiscount }) {
+export function DiscountInput({ discount, onChangeDiscount, subtotal = 0 }) {
   const PRESET_PERCENTAGES = [5, 10, 15, 20]
+  const numSubtotal = Number(subtotal) || 0
+  const numDiscount = Number(discount) || 0
+  const discountAmount = (numSubtotal * numDiscount) / 100
+  const netAfterDiscount = Math.max(0, numSubtotal - discountAmount)
 
   return (
     <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 p-2.5 h-full">
@@ -416,7 +420,19 @@ export function DiscountInput({ discount, onChangeDiscount }) {
           ))}
         </div>
       </div>
+
+      {numDiscount > 0 && numSubtotal > 0 && (
+        <div className="mt-1.5 flex items-center justify-between rounded-lg bg-emerald-50 px-2 py-0.5 border border-emerald-200/60 text-[10px]">
+          <span className="font-semibold text-emerald-800">
+            Save ₹{discountAmount.toFixed(2)} ({numDiscount}%)
+          </span>
+          <span className="font-bold text-emerald-900">
+            New Subtotal: ₹{netAfterDiscount.toFixed(2)}
+          </span>
+        </div>
+      )}
     </div>
   )
 }
+
 
