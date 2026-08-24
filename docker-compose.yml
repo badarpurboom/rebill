@@ -32,6 +32,24 @@ services:
       - "443:443"
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - backend
+    networks:
+      - rebill-network
+
+  mcp-server:
+    build:
+      context: ./pos-mcp-server
+      dockerfile: Dockerfile
+    container_name: rebill-mcp
+    restart: unless-stopped
+    ports:
+      - "3333:3333"
+    environment:
+      - PORT=3333
+      - API_BASE_URL=http://backend:8000/api/ai
     depends_on:
       - backend
     networks:

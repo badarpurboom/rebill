@@ -49,6 +49,11 @@ jobs:
           npm ci || npm install
           npm run build
 
+      - name: Install MCP Server Dependencies & Verify
+        run: |
+          cd pos-mcp-server
+          npm ci || npm install
+
       - name: Verify Docker Compose Configuration
         run: |
           docker compose config
