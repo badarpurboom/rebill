@@ -14,9 +14,12 @@ class RestaurantSettings(models.Model):
 
     SINGLETON_ID = 1
 
-    # ── Bill header ──────────────────────────────────────────────────────
+    # ── Bill header & Location ──────────────────────────────────────────
     restaurant_name = models.CharField(max_length=120, default='ReBill Restaurant')
     address = models.TextField(default='123, Main Market, New Delhi - 110001')
+    city = models.CharField(max_length=100, default='New Delhi', help_text='City for local weather & holidays')
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, default=Decimal('28.613900'), help_text='Latitude for weather API')
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, default=Decimal('77.209000'), help_text='Longitude for weather API')
     gstin = models.CharField(max_length=15, blank=True, default='')
     phone = models.CharField(max_length=15, blank=True, default='')
 
