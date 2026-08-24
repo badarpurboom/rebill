@@ -10,7 +10,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 
 dotenv.config();
 
-const PORT = process.env.MCP_PORT || 3333;
+const PORT = process.env.MCP_PORT || process.env.PORT || 3333;
 const API_BASE_URL = (process.env.API_BASE_URL || 'https://laoo.online/api/ai').replace(/\/+$/, '');
 const AI_TOKEN = process.env.AI_CONNECTION_TOKEN || 'POS-c79aa012f0cc75a4b89807dc72e85d97';
 
