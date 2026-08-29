@@ -5,6 +5,15 @@ import { errorMessage } from '@/services/api'
 import { orders as orderApi, restaurantSettings } from '@/services/billing'
 import { categories as categoryApi, items as itemApi } from '@/services/menu'
 import { tables as tableApi, TABLE_STATUS } from '@/services/tables'
+import {
+  getCache,
+  setCache,
+  saveOfflineRunningOrder,
+  getOfflineRunningOrder,
+  getAllOfflineRunningOrders,
+  deleteOfflineRunningOrder,
+  getNextOfflineKOTNumber,
+} from '@/services/db'
 import { money } from '@/utils/format'
 import { Badge, PageLoader } from '@/components/ui/Misc'
 import MenuGrid from '@/components/pos/MenuGrid'
@@ -25,6 +34,7 @@ import {
   IconTables,
   IconChevronRight,
 } from '@/components/ui/Icons'
+
 
 export default function POS() {
   const [params, setParams] = useSearchParams()
@@ -60,8 +70,21 @@ export default function POS() {
   const [pendingPayOrder, setPendingPayOrder] = useState(null)
   const [quickCustomerOpen, setQuickCustomerOpen] = useState(false)
 
-  // Fetch menu, settings and active open takeaway orders
+  // Load cached master data immediately for 0ms cold start, then refresh in background
   useEffect(() => {
+    Promise.all([
+      getCache('menu_items'),
+      getCache('menu_categories'),
+      getCache('restaurant_settings'),
+    ]).then(([cachedItems, cachedCats, cachedSettings]) => {
+      if (cachedItems?.length || cachedCats?.length) {
+        setMenu({ items: cachedItems || [], categories: cachedCats || [] })
+      }
+      if (cachedSettings) {
+        setSettings(cachedSettings)
+      }
+    })
+
     Promise.all([
       itemApi.list().catch(() => []),
       categoryApi.list().catch(() => []),
@@ -69,7 +92,10 @@ export default function POS() {
       orderApi.listOpen().catch(() => []),
     ])
       .then(([items, categories, config, openOrders]) => {
-        setMenu({ items, categories })
+        if (items?.length) setCache('menu_items', items)
+        if (categories?.length) setCache('menu_categories', categories)
+        if (config) setCache('restaurant_settings', config)
+        setMenu({ items: items || [], categories: categories || [] })
         setSettings(config)
         setActiveTakeawaysList(openOrders.filter((o) => o.order_type === 'TAKEAWAY'))
       })
@@ -99,10 +125,35 @@ export default function POS() {
         setRedeemPoints(0)
         if (data.status === 'BILLED' && data.bill) setBill(data.bill)
       })
-      .catch((error) => {
+      .catch(async (error) => {
         if (cancelled) return
-        toast.error(errorMessage(error, 'Failed to load order.'))
-        setParams({}, { replace: true })
+        // Offline Fallback for Table / Order
+        const existingOffline = tableId ? await getOfflineRunningOrder(tableId) : null
+        if (existingOffline) {
+          setOrder(existingOffline)
+          setDiscount('')
+          setRedeemPoints(0)
+        } else if (tableId) {
+          const newOfflineOrder = {
+            id: 'off_' + Date.now(),
+            order_type: 'DINE_IN',
+            table_id: Number(tableId),
+            table: Number(tableId),
+            table_number: Number(tableId),
+            status: 'RUNNING',
+            items: [],
+            subtotal: '0.00',
+            created_at: new Date().toISOString(),
+            is_offline: true,
+          }
+          await saveOfflineRunningOrder(newOfflineOrder)
+          setOrder(newOfflineOrder)
+          setDiscount('')
+          setRedeemPoints(0)
+        } else {
+          toast.error(errorMessage(error, 'Failed to load order.'))
+          setParams({}, { replace: true })
+        }
       })
       .finally(() => !cancelled && setLoading(false))
 
@@ -138,17 +189,57 @@ export default function POS() {
 
   const refreshOrder = useCallback(async () => {
     if (!orderId) return
+    if (order?.is_offline || String(orderId).startsWith('off_')) {
+      const offline = await getOfflineRunningOrder(orderId)
+      if (offline) setOrder(offline)
+      return
+    }
     setOrder(await orderApi.get(orderId))
     orderApi.listOpen().then((openOrders) => {
       setActiveTakeawaysList(openOrders.filter((o) => o.order_type === 'TAKEAWAY' && o.has_kots))
     }).catch(() => {})
-  }, [orderId])
+  }, [orderId, order?.is_offline])
 
   const addItem = async (variant) => {
     setBusyVariant(variant.id)
     try {
-      await orderApi.addItem(order.id, { variant: variant.id, quantity: 1 })
-      await refreshOrder()
+      if (order?.is_offline || String(order?.id).startsWith('off_')) {
+        const existingItem = (order.items || []).find((it) => it.variant === variant.id)
+        let updatedItems = []
+        if (existingItem) {
+          updatedItems = (order.items || []).map((it) =>
+            it.variant === variant.id
+              ? {
+                  ...it,
+                  quantity: it.quantity + 1,
+                  line_total: ((it.quantity + 1) * Number(it.unit_price)).toFixed(2),
+                }
+              : it
+          )
+        } else {
+          const newItem = {
+            id: 'item_' + Date.now(),
+            variant: variant.id,
+            item_name: variant.item_name || variant.name || 'Item',
+            portion: variant.portion || 'FULL',
+            food_type: variant.food_type || 'VEG',
+            unit_price: String(variant.price),
+            quantity: 1,
+            line_total: String(variant.price),
+            kot: null,
+          }
+          updatedItems = [...(order.items || []), newItem]
+        }
+        const newSubtotal = updatedItems
+          .reduce((acc, it) => acc + Number(it.unit_price) * it.quantity, 0)
+          .toFixed(2)
+        const updatedOrder = { ...order, items: updatedItems, subtotal: newSubtotal }
+        await saveOfflineRunningOrder(updatedOrder)
+        setOrder(updatedOrder)
+      } else {
+        await orderApi.addItem(order.id, { variant: variant.id, quantity: 1 })
+        await refreshOrder()
+      }
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to add item.'))
     } finally {
@@ -170,12 +261,35 @@ export default function POS() {
   const changeQuantity = async (line, quantity) => {
     setBusyItemId(line.id)
     try {
-      if (quantity < 1) {
-        await orderApi.removeItem(order.id, line.id)
+      if (order?.is_offline || String(order?.id).startsWith('off_')) {
+        let updatedItems
+        if (quantity < 1) {
+          updatedItems = (order.items || []).filter((it) => it.id !== line.id)
+        } else {
+          updatedItems = (order.items || []).map((it) =>
+            it.id === line.id
+              ? {
+                  ...it,
+                  quantity,
+                  line_total: (quantity * Number(it.unit_price)).toFixed(2),
+                }
+              : it
+          )
+        }
+        const newSubtotal = updatedItems
+          .reduce((acc, it) => acc + Number(it.unit_price) * it.quantity, 0)
+          .toFixed(2)
+        const updatedOrder = { ...order, items: updatedItems, subtotal: newSubtotal }
+        await saveOfflineRunningOrder(updatedOrder)
+        setOrder(updatedOrder)
       } else {
-        await orderApi.updateItem(order.id, line.id, { quantity })
+        if (quantity < 1) {
+          await orderApi.removeItem(order.id, line.id)
+        } else {
+          await orderApi.updateItem(order.id, line.id, { quantity })
+        }
+        await refreshOrder()
       }
-      await refreshOrder()
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to update quantity.'))
     } finally {
@@ -186,8 +300,18 @@ export default function POS() {
   const removeItem = async (line) => {
     setBusyItemId(line.id)
     try {
-      await orderApi.removeItem(order.id, line.id)
-      await refreshOrder()
+      if (order?.is_offline || String(order?.id).startsWith('off_')) {
+        const updatedItems = (order.items || []).filter((it) => it.id !== line.id)
+        const newSubtotal = updatedItems
+          .reduce((acc, it) => acc + Number(it.unit_price) * it.quantity, 0)
+          .toFixed(2)
+        const updatedOrder = { ...order, items: updatedItems, subtotal: newSubtotal }
+        await saveOfflineRunningOrder(updatedOrder)
+        setOrder(updatedOrder)
+      } else {
+        await orderApi.removeItem(order.id, line.id)
+        await refreshOrder()
+      }
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to remove item.'))
     } finally {
@@ -198,10 +322,31 @@ export default function POS() {
   const sendKot = async () => {
     setSendingKot(true)
     try {
-      const slip = await orderApi.sendKot(order.id)
-      await refreshOrder()
-      setKotSlip(slip)
-      toast.success(`KOT #${slip.number} sent to kitchen`)
+      if (order?.is_offline || String(order?.id).startsWith('off_')) {
+        const kotNum = await getNextOfflineKOTNumber()
+        const unprintedItems = (order.items || []).filter((it) => !it.kot)
+        const updatedItems = (order.items || []).map((it) => ({ ...it, kot: kotNum }))
+        const updatedOrder = { ...order, items: updatedItems, has_kots: true }
+        await saveOfflineRunningOrder(updatedOrder)
+        setOrder(updatedOrder)
+
+        const slip = {
+          id: 'kot_' + Date.now(),
+          number: kotNum,
+          order_type: order.order_type || 'DINE_IN',
+          table_number: order.table_number || order.table,
+          created_at: new Date().toISOString(),
+          created_by_name: 'Staff (Offline)',
+          items: unprintedItems.length ? unprintedItems : order.items,
+        }
+        setKotSlip(slip)
+        toast.success(`KOT #${kotNum} printed (Offline Mode)`)
+      } else {
+        const slip = await orderApi.sendKot(order.id)
+        await refreshOrder()
+        setKotSlip(slip)
+        toast.success(`KOT #${slip.number} sent to kitchen`)
+      }
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to send KOT.'))
     } finally {
@@ -316,7 +461,22 @@ export default function POS() {
       setParams({ order: String(takeawayOrder.id) })
       toast.success(`Takeaway Order ${tagName ? `(${tagName})` : ''} started!`)
     } catch (error) {
-      toast.error(errorMessage(error, 'Failed to start takeaway order.'))
+      // Offline takeaway fallback
+      const offlineTakeaway = {
+        id: 'off_tk_' + Date.now(),
+        order_type: 'TAKEAWAY',
+        table: null,
+        tag_name: tagName || 'Parcel',
+        status: 'RUNNING',
+        items: [],
+        subtotal: '0.00',
+        created_at: new Date().toISOString(),
+        is_offline: true,
+      }
+      await saveOfflineRunningOrder(offlineTakeaway)
+      setOrder(offlineTakeaway)
+      setParams({ order: String(offlineTakeaway.id) })
+      toast.success(`Takeaway Order ${tagName ? `(${tagName})` : ''} started (Offline)!`)
     }
   }
 

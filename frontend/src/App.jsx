@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '@/context/AuthContext'
 import { ToastProvider } from '@/context/ToastContext'
+import { SyncProvider } from '@/context/SyncContext'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import ComingSoon from '@/pages/ComingSoon'
@@ -20,13 +21,14 @@ import Feedback from '@/pages/Feedback'
 import WhatsApp from '@/pages/WhatsApp'
 import { hasPermission } from '@/utils/roles'
 
-// Rebill Application Root - CI/CD & Docker Pipeline Test
+// Rebill Application Root - Hybrid Offline-First Architecture
 export default function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
-        <AuthProvider>
-          <Routes>
+        <SyncProvider>
+          <AuthProvider>
+            <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/feedback/:token" element={<Feedback />} />
 
@@ -50,6 +52,7 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
+        </SyncProvider>
       </ToastProvider>
     </BrowserRouter>
   )
