@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import { useSync } from '@/context/SyncContext'
 import { navFor } from '@/utils/roles'
 import { IconChefHat } from '@/components/ui/Icons'
 
@@ -27,6 +28,7 @@ const SHORT_LABEL = {
 
 export default function Layout() {
   const { user, role, logout } = useAuth()
+  const { isOnline, isSyncing, pendingCount, triggerSync } = useSync()
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
@@ -93,8 +95,52 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* Bottom User Avatar & Logout */}
+        {/* Sync Status Badge & User Avatar */}
         <div className="px-2 pt-2 border-t border-slate-100 flex flex-col items-center gap-2">
+          {/* Sync Status Indicator Button */}
+          <button
+            onClick={() => triggerSync(true)}
+            disabled={isSyncing}
+            title={
+              !isOnline
+                ? `Offline (${pendingCount} pending bills/actions) — Click to retry sync`
+                : isSyncing
+                ? 'Syncing offline records to cloud...'
+                : pendingCount > 0
+                ? `${pendingCount} items waiting to sync — Click to sync now`
+                : 'Hybrid Engine: Online & Synced'
+            }
+            className={`w-full flex flex-col items-center justify-center p-1.5 rounded-xl border transition-all active:scale-95 ${
+              !isOnline
+                ? 'bg-amber-50 border-amber-300 text-amber-800'
+                : isSyncing
+                ? 'bg-blue-50 border-blue-300 text-blue-800 animate-pulse'
+                : pendingCount > 0
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center gap-1">
+              <span
+                className={`size-2 rounded-full ${
+                  !isOnline
+                    ? 'bg-amber-500'
+                    : isSyncing
+                    ? 'bg-blue-500'
+                    : 'bg-emerald-500'
+                }`}
+              />
+              <span className="text-[9px] font-black tracking-wider uppercase">
+                {!isOnline ? 'OFFLINE' : isSyncing ? 'SYNCING' : 'ONLINE'}
+              </span>
+            </div>
+            {pendingCount > 0 && (
+              <span className="text-[8px] font-bold text-amber-700 bg-amber-200/80 rounded-full px-1.5 mt-0.5">
+                {pendingCount} wait
+              </span>
+            )}
+          </button>
+
           <div
             title={`${user?.full_name || user?.username} (${user?.custom_role?.name || user?.role_display || user?.role})`}
             className="flex size-9 items-center justify-center rounded-xl bg-slate-100 text-xs font-black text-slate-800 border border-slate-200"
@@ -132,11 +178,31 @@ export default function Layout() {
             </div>
           </div>
 
-          <span
-            className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${ROLE_TONE[role] ?? ''}`}
-          >
-            {user?.custom_role?.name || user?.role_display || user?.role}
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => triggerSync(true)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold ${
+                !isOnline
+                  ? 'bg-amber-50 border-amber-300 text-amber-800'
+                  : isSyncing
+                  ? 'bg-blue-50 border-blue-300 text-blue-800 animate-pulse'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-800'
+              }`}
+            >
+              <span
+                className={`size-2 rounded-full ${
+                  !isOnline ? 'bg-amber-500' : isSyncing ? 'bg-blue-500' : 'bg-emerald-500'
+                }`}
+              />
+              <span>{!isOnline ? `OFFLINE (${pendingCount})` : isSyncing ? 'SYNC' : 'ONLINE'}</span>
+            </button>
+
+            <span
+              className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${ROLE_TONE[role] ?? ''}`}
+            >
+              {user?.custom_role?.name || user?.role_display || user?.role}
+            </span>
+          </div>
         </header>
 
         {/* Viewport */}

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { errorMessage } from '@/services/api'
 import { customers as customerApi } from '@/services/customers'
+import { enqueueOutbox } from '@/services/db'
 import Button from '@/components/ui/Button'
 import { FormRow, Input } from '@/components/ui/Field'
 import Modal from '@/components/ui/Modal'
 import { Badge, Spinner } from '@/components/ui/Misc'
+
 
 export default function QuickCustomerModal({
   open,
@@ -88,17 +90,38 @@ export default function QuickCustomerModal({
     try {
       let finalCustomer = customer
       if (!customer) {
-        // Create new customer
-        finalCustomer = await customerApi.create({
-          name: name.trim(),
-          phone: digits,
-        })
+        try {
+          // Create new customer via API
+          finalCustomer = await customerApi.create({
+            name: name.trim(),
+            phone: digits,
+          })
+        } catch (apiErr) {
+          // Offline fallback
+          const tempCustId = 'temp_cust_' + Date.now()
+          finalCustomer = {
+            id: tempCustId,
+            temp_id: tempCustId,
+            name: name.trim(),
+            phone: digits,
+            points_balance: 0,
+            is_offline: true,
+          }
+          await enqueueOutbox('CREATE_CUSTOMER', {
+            temp_id: tempCustId,
+            name: name.trim(),
+            phone: digits,
+          })
+        }
       } else if (customer.name !== name.trim()) {
-        // Update existing customer name if changed
-        finalCustomer = await customerApi.update(customer.id, {
-          name: name.trim(),
-          phone: customer.phone,
-        })
+        try {
+          finalCustomer = await customerApi.update(customer.id, {
+            name: name.trim(),
+            phone: customer.phone,
+          })
+        } catch {
+          finalCustomer = { ...customer, name: name.trim() }
+        }
       }
 
       await onSaveAndProceed(finalCustomer, Number(redeemPoints) || 0)

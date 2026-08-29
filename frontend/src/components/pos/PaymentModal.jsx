@@ -4,9 +4,12 @@ import Button from '@/components/ui/Button'
 import { money } from '@/utils/format'
 import { orders as orderApi, bills as billApi, restaurantSettings, PAYMENT_MODES } from '@/services/billing'
 import { errorMessage } from '@/services/api'
+import { enqueueOutbox, getNextOfflineBillNumber, saveOfflineBill, deleteOfflineRunningOrder, getCache } from '@/services/db'
+import { syncEngine } from '@/services/syncEngine'
 import ThermalBill from '@/components/print/ThermalBill'
 import PrintSlipModal from '@/components/print/PrintSlipModal'
 import { CouponInput, DiscountInput, LoyaltyRow } from '@/components/pos/CartPanel'
+
 
 export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
   const [order, setOrder] = useState(initialOrder)
@@ -182,18 +185,93 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
     setBusy(true)
     setError('')
     try {
-      // 1. Generate Bill
+      // 1. Online Attempt: Generate Bill
       const payload = {
         discount_percent: discount === '' ? '0' : discount,
         redeem_points: redeemPoints,
       }
       const newBill = await orderApi.generateBill(order.id, payload)
       
-      // 2. Pay Bill
+      // 2. Online Attempt: Pay Bill
       const updated = await billApi.pay(newBill.id, mode)
       setBill(updated)
       onPaid?.(updated)
     } catch (err) {
+      // Offline fallback: If network error or backend offline, create local offline bill & enqueue
+      const isNetworkErr = !navigator.onLine || !err?.response || err?.code === 'ERR_NETWORK'
+      if (isNetworkErr || String(order.id).startsWith('off_') || String(order.id).startsWith('temp_')) {
+        try {
+          const offlineBillNo = await getNextOfflineBillNumber('OFF')
+          const sysSettings = settings || (await getCache('restaurant_settings')) || {}
+          
+          const offlineBill = {
+            id: 'offline_' + Date.now(),
+            order: order.id,
+            order_type: order.order_type || 'DINE_IN',
+            bill_number: offlineBillNo,
+            table_number: order.table_number || (order.table ? order.table.number : 'Takeaway'),
+            created_at: new Date().toISOString(),
+            paid_at: new Date().toISOString(),
+            customer_name: order.customer_name || (order.customer_detail ? order.customer_detail.name : ''),
+            customer_phone: order.customer_phone || (order.customer_detail ? order.customer_detail.phone : ''),
+            items: order.items || [],
+            subtotal: displaySubtotal,
+            discount_percent: displayDiscountPercent,
+            discount_amount: displayDiscountAmount,
+            taxable_amount: calcTaxable.toFixed(2),
+            cgst_percent: displayCgstPercent,
+            cgst_amount: displayCgstAmount,
+            sgst_percent: displaySgstPercent,
+            sgst_amount: displaySgstAmount,
+            total: displayGrossTotal,
+            points_redeemed: displayPointsRedeemed,
+            redeem_amount: displayRedeemAmount,
+            net_payable: due,
+            status: 'PAID',
+            payment_mode: mode,
+            is_offline: true,
+            restaurant_name: sysSettings.restaurant_name || 'RESTAURANT RECEIPT',
+            restaurant_address: sysSettings.address || '',
+            gstin: sysSettings.gstin || '',
+          }
+
+          // Enqueue to outbox for cloud sync when online
+          await enqueueOutbox('CREATE_AND_PAY_BILL', {
+            order_type: order.order_type || 'DINE_IN',
+            table_id: order.table_id || order.table,
+            customer_id: order.customer || (order.customer_detail ? order.customer_detail.id : null),
+            customer_phone: order.customer_phone || (order.customer_detail ? order.customer_detail.phone : ''),
+            tag_name: order.tag_name || '',
+            items: order.items || [],
+            bill: {
+              offline_bill_number: offlineBillNo,
+              discount_percent: displayDiscountPercent,
+              redeem_points: displayPointsRedeemed,
+              subtotal: displaySubtotal,
+              discount_amount: displayDiscountAmount,
+              taxable_amount: calcTaxable.toFixed(2),
+              cgst_percent: displayCgstPercent,
+              cgst_amount: displayCgstAmount,
+              sgst_percent: displaySgstPercent,
+              sgst_amount: displaySgstAmount,
+              total: displayGrossTotal,
+              redeem_amount: displayRedeemAmount,
+              net_payable: due,
+              payment_mode: mode,
+            },
+          })
+
+          await saveOfflineBill(offlineBill)
+          await deleteOfflineRunningOrder(order.id)
+          
+          setBill(offlineBill)
+          onPaid?.(offlineBill)
+          syncEngine.checkConnectivityAndSync().catch(() => {})
+          return
+        } catch (offlineErr) {
+          console.error('Offline bill generation error:', offlineErr)
+        }
+      }
       setError(errorMessage(err, 'Failed to process payment.'))
     } finally {
       setBusy(false)
