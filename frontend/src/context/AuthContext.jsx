@@ -51,18 +51,48 @@ export function AuthProvider({ children }) {
     dispatch({ type: 'GUEST' })
   }, [])
 
+  const can = useCallback(
+    (permission) => {
+      return authService.hasPermission ? authService.hasPermission(state.user, permission) : true
+    },
+    [state.user],
+  )
+
+  const isOwner = useMemo(() => {
+    if (!state.user) return false
+    if (state.user.is_superuser || state.user.is_owner) return true
+    if (state.user.role === 'OWNER') return true
+    if (state.user.custom_role?.name?.toLowerCase() === 'owner') return true
+    return false
+  }, [state.user])
+
+  const isCashier = useMemo(() => {
+    if (!state.user) return false
+    if (state.user.role === 'CASHIER') return true
+    if (state.user.custom_role?.name?.toLowerCase() === 'cashier') return true
+    return false
+  }, [state.user])
+
+  const isWaiter = useMemo(() => {
+    if (!state.user) return false
+    if (state.user.role === 'WAITER') return true
+    if (state.user.custom_role?.name?.toLowerCase() === 'waiter') return true
+    return false
+  }, [state.user])
+
   const value = useMemo(
     () => ({
       user: state.user,
       status: state.status,
-      role: state.user?.role ?? null,
-      isOwner: state.user?.role === 'OWNER',
-      isCashier: state.user?.role === 'CASHIER',
-      isWaiter: state.user?.role === 'WAITER',
+      role: state.user?.custom_role?.name || state.user?.role_display || state.user?.role || null,
+      isOwner,
+      isCashier,
+      isWaiter,
+      can,
       login,
       logout,
     }),
-    [state, login, logout],
+    [state, isOwner, isCashier, isWaiter, can, login, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

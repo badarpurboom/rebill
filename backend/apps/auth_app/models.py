@@ -4,6 +4,7 @@ from django.db import models
 
 class CustomRole(models.Model):
     name = models.CharField(max_length=50, unique=True)
+    description = models.CharField(max_length=255, blank=True, default='')
     permissions = models.JSONField(default=dict, blank=True)
     is_system = models.BooleanField(default=False, help_text="System roles cannot be deleted")
 
@@ -40,27 +41,33 @@ class User(AbstractUser):
         return f'{self.username} ({role_name})'
 
     def has_perm_dynamic(self, perm):
+        if self.is_superuser:
+            return True
         if not self.custom_role:
             # Fallback to old string roles if not migrated yet
             if self.role == Role.OWNER:
                 return True
             return False
-        return self.custom_role.permissions.get(perm, False)
+        if self.custom_role.name.lower() == 'owner':
+            return True
+        return bool(self.custom_role.permissions.get(perm, False))
 
     @property
     def is_owner(self):
+        if self.is_superuser:
+            return True
         if self.custom_role:
-            return self.custom_role.name == 'Owner'
+            return self.custom_role.name.lower() == 'owner' or bool(self.custom_role.permissions.get('manage_staff'))
         return self.role == Role.OWNER
 
     @property
     def is_cashier(self):
         if self.custom_role:
-            return self.custom_role.name == 'Cashier'
+            return self.custom_role.name.lower() == 'cashier'
         return self.role == Role.CASHIER
 
     @property
     def is_waiter(self):
         if self.custom_role:
-            return self.custom_role.name == 'Waiter'
+            return self.custom_role.name.lower() == 'waiter'
         return self.role == Role.WAITER
