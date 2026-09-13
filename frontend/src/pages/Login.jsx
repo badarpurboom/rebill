@@ -8,12 +8,6 @@ import Button from '@/components/ui/Button'
 import { FormRow, Input } from '@/components/ui/Field'
 import { PageLoader } from '@/components/ui/Misc'
 
-const DEMO_LOGINS = [
-  { username: 'owner', password: 'owner123', label: 'Owner', tone: 'bg-brand-50 text-brand-700 ring-brand-200' },
-  { username: 'cashier', password: 'cashier123', label: 'Cashier', tone: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
-  { username: 'waiter', password: 'waiter123', label: 'Waiter', tone: 'bg-amber-50 text-amber-700 ring-amber-200' },
-]
-
 export default function Login() {
   const { login, status, role } = useAuth()
   const navigate = useNavigate()
@@ -56,12 +50,6 @@ export default function Login() {
     }
   }
 
-  const fillDemo = (demo) => {
-    setValue('username', demo.username)
-    setValue('password', demo.password)
-    setFormError('')
-  }
-
   return (
     <div className="flex min-h-full items-center justify-center bg-slate-50 px-4 py-10">
       <div className="w-full max-w-sm">
@@ -81,7 +69,7 @@ export default function Login() {
             <Input
               id="username"
               autoComplete="username"
-              placeholder="owner"
+              placeholder="Enter username"
               error={errors.username}
               {...register('username', { required: 'Enter username' })}
             />
@@ -111,24 +99,6 @@ export default function Login() {
             Login
           </Button>
         </form>
-
-        <div className="mt-6">
-          <p className="mb-2 text-center text-xs font-medium tracking-wide text-slate-400 uppercase">
-            Demo logins
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {DEMO_LOGINS.map((demo) => (
-              <button
-                key={demo.username}
-                type="button"
-                onClick={() => fillDemo(demo)}
-                className={`rounded-lg px-2 py-2 text-xs font-medium ring-1 transition hover:brightness-95 ${demo.tone}`}
-              >
-                {demo.label}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   )
