@@ -13,6 +13,7 @@ urlpatterns = [
     path('refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('verify/', TokenVerifyView.as_view(), name='token-verify'),
     path('me/', views.me, name='me'),
+    path('permissions/', views.list_permissions, name='permissions-list'),
     path('verify-owner/', views.verify_owner, name='verify-owner'),
     path('', include(router.urls)),
 ]

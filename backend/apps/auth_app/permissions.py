@@ -25,13 +25,23 @@ class HasDynamicPermission(BasePermission):
 
 
 class IsOwner(BasePermission):
-    """Owner only — reports, settings, menu editing, user management."""
+    """Owner or staff manager — reports, settings, user management."""
 
-    message = 'Sirf Owner hi yeh action kar sakta hai.'
+    message = 'Yeh action karne ki permission aapke paas nahi hai.'
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(user and user.is_authenticated and user.is_owner)
+        return bool(
+            user
+            and user.is_authenticated
+            and (
+                user.is_superuser
+                or user.is_owner
+                or has_perm(user, 'manage_staff')
+                or has_perm(user, 'manage_roles')
+                or has_perm(user, 'view_settings')
+            )
+        )
 
 
 class IsOwnerOrCashier(BasePermission):

@@ -19,6 +19,9 @@ const BADGE_TONE = {
   green: 'bg-emerald-100/80 text-emerald-800 border border-emerald-200/60',
   red: 'bg-rose-100/80 text-rose-800 border border-rose-200/60',
   amber: 'bg-amber-100/80 text-amber-800 border border-amber-200/60',
+  blue: 'bg-blue-100/80 text-blue-800 border border-blue-200/60',
+  indigo: 'bg-indigo-100/80 text-indigo-800 border border-indigo-200/60',
+  purple: 'bg-purple-100/80 text-purple-800 border border-purple-200/60',
   brand: 'bg-rose-100 text-rose-800 border border-rose-200',
 }
 

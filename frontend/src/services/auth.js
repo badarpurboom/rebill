@@ -1,4 +1,7 @@
 import api, { tokens } from './api'
+import { hasPermission } from '@/utils/roles'
+
+export { hasPermission }
 
 export async function login(username, password) {
   const { data } = await api.post('/auth/login/', { username, password })
@@ -25,10 +28,12 @@ export async function verifyOwner(username, password) {
 }
 
 export const users = {
-  list: () => api.get('/auth/users/').then((r) => r.data),
+  list: (params) => api.get('/auth/users/', { params }).then((r) => r.data),
   create: (payload) => api.post('/auth/users/', payload).then((r) => r.data),
   update: (id, payload) => api.patch(`/auth/users/${id}/`, payload).then((r) => r.data),
   remove: (id) => api.delete(`/auth/users/${id}/`),
+  resetPassword: (id, new_password) =>
+    api.post(`/auth/users/${id}/reset-password/`, { new_password }).then((r) => r.data),
 }
 
 export const roles = {
@@ -37,3 +42,8 @@ export const roles = {
   update: (id, payload) => api.patch(`/auth/roles/${id}/`, payload).then((r) => r.data),
   remove: (id) => api.delete(`/auth/roles/${id}/`),
 }
+
+export const permissions = {
+  list: () => api.get('/auth/permissions/').then((r) => r.data),
+}
+
