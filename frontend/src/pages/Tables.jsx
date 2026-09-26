@@ -8,25 +8,13 @@ import { orders as orderApi } from '@/services/billing'
 import { money } from '@/utils/format'
 import Button from '@/components/ui/Button'
 import { EmptyState, PageLoader } from '@/components/ui/Misc'
-import FloorMap, { FloorLegend } from '@/components/tables/FloorMap'
+import FloorMap from '@/components/tables/FloorMap'
 import TableFormModal from '@/components/tables/TableFormModal'
 import TransferModal from '@/components/tables/TransferModal'
 import VoidOrderModal from '@/components/tables/VoidOrderModal'
 import PaymentModal from '@/components/pos/PaymentModal'
 import QuickCustomerModal from '@/components/customers/QuickCustomerModal'
 import TakeawayNameModal from '@/components/pos/TakeawayNameModal'
-
-/* ─── Helpers ─────────────────────────────────────────────────────── */
-function todayLabel() {
-  return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function shiftLabel() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Morning Shift'
-  if (h < 17) return 'Lunch Shift'
-  return 'Dinner Shift'
-}
 
 /* ─── Page ────────────────────────────────────────────────────────── */
 export default function Tables() {
@@ -40,10 +28,10 @@ export default function Tables() {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formTable, setFormTable] = useState(null)
-  const [liveMode, setLiveMode] = useState(false)
   const [payingOrder, setPayingOrder] = useState(null)
   const [quickCustomerOpen, setQuickCustomerOpen] = useState(false)
   const [pendingOrder, setPendingOrder] = useState(null)
+  const [takeaways, setTakeaways] = useState([])
   const [startingTakeaway, setStartingTakeaway] = useState(false)
   const [transferringTable, setTransferringTable] = useState(null)
   const [voidingTable, setVoidingTable] = useState(null)
@@ -51,7 +39,12 @@ export default function Tables() {
   /* Load */
   const load = useCallback(async () => {
     try {
-      setRows(await tableApi.list())
+      const [tableList, openOrders] = await Promise.all([
+        tableApi.list(),
+        orderApi.listOpen().catch(() => []),
+      ])
+      setRows(tableList)
+      setTakeaways((openOrders || []).filter((o) => o.order_type === 'TAKEAWAY' && o.has_kots))
     } catch (err) {
       toast.error(errorMessage(err, 'Failed to load floor map.'))
     } finally {
@@ -64,7 +57,12 @@ export default function Tables() {
   /* Auto-refresh */
   useEffect(() => {
     if (editing) return
-    const id = setInterval(() => tableApi.list().then(setRows).catch(() => {}), 15_000)
+    const id = setInterval(() => {
+      tableApi.list().then(setRows).catch(() => {})
+      orderApi.listOpen().then((openOrders) => {
+        setTakeaways((openOrders || []).filter((o) => o.order_type === 'TAKEAWAY' && o.has_kots))
+      }).catch(() => {})
+    }, 15_000)
     return () => clearInterval(id)
   }, [editing])
 
@@ -74,16 +72,6 @@ export default function Tables() {
     for (const t of rows) c[t.status] = (c[t.status] ?? 0) + 1
     return c
   }, [rows])
-
-  const activeCount = useMemo(
-    () => rows.filter((t) => t.status === 'OCCUPIED' || t.status === 'BILLED').length,
-    [rows],
-  )
-
-  const floorTotal = useMemo(
-    () => rows.reduce((s, t) => s + Number(t.running_total ?? 0), 0),
-    [rows],
-  )
 
   /* Layout drag */
   const moveTable = (id, pos_x, pos_y) => {
@@ -220,101 +208,219 @@ export default function Tables() {
     setPayingOrder(pendingOrder)
   }
 
-  if (loading) return <PageLoader label="Loading floor map…" />
+  const handlePayTakeaway = async (tk) => {
+    setLoading(true)
+    try {
+      const order = await orderApi.get(tk.id)
+      if (!order.customer) {
+        setPendingOrder(order)
+        setQuickCustomerOpen(true)
+      } else {
+        setPayingOrder(order)
+      }
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to open payment for takeaway.'))
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const activeLabel = `${activeCount}/${rows.length} Tables Active`
+  const handleVoidTakeaway = async (tk) => {
+    if (!window.confirm(`Are you sure you want to cancel Takeaway #${tk.id}?`)) return
+    try {
+      await orderApi.void(tk.id)
+      toast.success(`Takeaway #${tk.id} cancelled.`)
+      await load()
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to cancel takeaway.'))
+    }
+  }
+
+  if (loading) return <PageLoader label="Loading floor map…" />
 
   return (
     <div className="space-y-5">
 
-      {/* ── Header Card (matches Stitch "Main Dining Room" header) ── */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white px-6 py-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-
-          {/* Left: Title + subtitle */}
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Main Dining Room</h1>
-            <p className="mt-0.5 text-sm font-semibold text-slate-500">
-              {shiftLabel()} &nbsp;•&nbsp;
-              <span className="font-bold text-slate-700">{activeLabel}</span>
-            </p>
-          </div>
-
-          {/* Right: Controls */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Date pill */}
-            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600">
-              <svg className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              {todayLabel()}
+      {/* ── Luxury Status Bar Header Card ── */}
+      <section
+        aria-label="Main Dining Room Live Status & Quick Action Bar"
+        className="luxury-panel w-full rounded-2xl md:rounded-3xl p-5 sm:p-6 md:px-8 md:py-6 border border-slate-200/80"
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-4">
+          {/* Left Section: Header Title and Real-Time Dining Indicators */}
+          <div className="space-y-3.5">
+            {/* Primary Title */}
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 font-sans leading-none">
+                Main Dining Room
+              </h1>
             </div>
 
-            {/* Takeaway Button */}
+            {/* Bottom Telemetry Chips Row: Available, Occupied, Billed */}
+            <div className="flex flex-wrap items-center gap-y-2 gap-x-5 text-sm font-medium" data-purpose="occupancy-telemetry">
+              {/* Indicator: Available (Green Dot) */}
+              <div
+                className="group inline-flex items-center gap-2 cursor-default transition-transform duration-200 hover:scale-105"
+                title={`${summary.AVAILABLE ?? 0} tables ready for seating`}
+              >
+                <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 group-hover:scale-150 transition-all duration-300"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 ring-2 ring-emerald-100"></span>
+                </span>
+                <span className="text-slate-600 font-medium group-hover:text-slate-900 transition-colors">
+                  Available <strong className="font-bold text-slate-900 ml-0.5">{summary.AVAILABLE ?? 0}</strong>
+                </span>
+              </div>
+
+              {/* Indicator: Occupied (Crimson Red Pulsing Dot) */}
+              <div
+                className="group inline-flex items-center gap-2 cursor-default transition-transform duration-200 hover:scale-105"
+                title={`${summary.OCCUPIED ?? 0} tables currently occupied`}
+              >
+                <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+                  {/* Outer glowing breathing radar ping */}
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-rose-600 animate-radar-wave"></span>
+                  {/* Core vibrant red dot */}
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600 ring-2 ring-rose-100 shadow-[0_0_8px_rgba(225,29,72,0.6)]"></span>
+                </span>
+                <span className="text-slate-600 font-medium group-hover:text-rose-700 transition-colors">
+                  Occupied <strong className="font-bold text-rose-600 ml-0.5">{summary.OCCUPIED ?? 0}</strong>
+                </span>
+              </div>
+
+              {/* Indicator: Billed (Amber Dot) */}
+              <div
+                className="group inline-flex items-center gap-2 cursor-default transition-transform duration-200 hover:scale-105"
+                title={`${summary.BILLED ?? 0} tables currently settling bills`}
+              >
+                <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500 ring-2 ring-amber-100"></span>
+                </span>
+                <span className="text-slate-600 font-medium group-hover:text-slate-900 transition-colors">
+                  Billed <strong className="font-bold text-slate-900 ml-0.5">{summary.BILLED ?? 0}</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Section: Action Button "Takeaway Order" */}
+          <div className="flex items-center self-start sm:self-auto pt-1 md:pt-0">
             <button
               onClick={handleStartTakeaway}
               disabled={startingTakeaway}
-              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-60"
+              className="shimmer-btn group relative inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-full text-sm font-bold tracking-tight text-white bg-slate-950 hover:bg-slate-900 border border-slate-800 shadow-lg shadow-slate-950/15 hover:shadow-xl hover:shadow-rose-600/25 active:scale-[0.97] transition-all duration-300 disabled:opacity-60 cursor-pointer"
+              type="button"
             >
-              <svg className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              {/* Glowing Red Ambient Hover Layer */}
+              <span className="absolute inset-0 rounded-full bg-gradient-to-r from-rose-600 to-rose-700 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-0"></span>
+              {/* Bag Icon */}
+              <svg
+                aria-hidden="true"
+                className="relative z-10 w-4 h-4 text-rose-400 group-hover:text-white transition-colors duration-300 transform group-hover:-translate-y-0.5"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.2"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path>
+                <path d="M3 6h18"></path>
+                <path d="M16 10a4 4 0 0 1-8 0"></path>
               </svg>
-              {startingTakeaway ? 'Starting...' : 'Takeaway'}
+              {/* Text Label */}
+              <span className="relative z-10 font-semibold tracking-normal text-white">
+                {startingTakeaway ? 'Starting...' : 'Takeaway Order'}
+              </span>
+              {/* Subtle Keycap Badge */}
+              <span className="relative z-10 hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-white/10 group-hover:bg-white/20 text-white/90 transition-colors">
+                +N
+              </span>
             </button>
-
-            {/* Live View toggle */}
-            <button
-              onClick={() => setLiveMode((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-                liveMode
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-                  : 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'
-              }`}
-            >
-              <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.381z" clipRule="evenodd" />
-              </svg>
-              Live View
-            </button>
-
-            {/* Owner controls */}
-            {isOwner && rows.length > 0 && (
-              editing ? (
-                <>
-                  <Button variant="secondary" onClick={cancelEdit} disabled={saving} className="rounded-xl font-bold text-sm">
-                    Cancel
-                  </Button>
-                  <Button onClick={saveLayout} loading={saving} disabled={!dirty} className="rounded-xl font-black text-sm bg-rose-600 text-white">
-                    {dirty ? 'Save Layout' : 'No Changes'}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="secondary" onClick={() => setFormTable({})} className="rounded-xl font-bold text-sm border-slate-200">
-                    + Add Table
-                  </Button>
-                  <Button variant="secondary" onClick={() => setEditing(true)} className="rounded-xl font-bold text-sm border-slate-200">
-                    ✥ Arrange
-                  </Button>
-                </>
-              )
-            )}
           </div>
         </div>
+      </section>
 
-        {/* Legend row */}
-        <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between border-t border-slate-100 pt-4">
-          <FloorLegend summary={summary} />
-          {floorTotal > 0 && (
-            <div className="text-xs font-bold text-slate-500">
-              Floor Total: <span className="font-black text-slate-900">{money(floorTotal)}</span>
+      {/* ── Active Takeaway Bags: Compact Boutique Die-Cut Carry Bag KPI Cards ── */}
+      {takeaways.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          {takeaways.map((tk) => (
+            <div key={tk.id} className="relative w-full group/card">
+              {/* Ambient Glow Behind Card */}
+              <div className="absolute -inset-1 bg-rose-500/10 rounded-[22px] blur-lg pointer-events-none transition-all duration-500 group-hover/card:bg-rose-500/20 group-hover/card:blur-xl" />
+
+              {/* Main Bag Container */}
+              <div className="boutique-card relative bg-[#131317] border border-[#23232c] rounded-2xl overflow-hidden shadow-[0_12px_30px_-8px_rgba(0,0,0,0.35)] transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-[0_18px_45px_rgba(225,29,72,0.22)] hover:border-rose-500/40 flex flex-col justify-between">
+                {/* Top Crimp Fold & Flap Section */}
+                <div className="pt-2 pb-2 bg-gradient-to-b from-[#1c1c22] to-[#151519] border-b border-zinc-800/80">
+                  <div className="crimp-seal -mt-2 mb-1.5 opacity-70" />
+                  {/* Integrated Die-Cut Oval Handle with Breathing Glow */}
+                  <div className="die-cut-handle animate-glow-pulse border border-rose-500/70" />
+                </div>
+
+                {/* Card Inner Body */}
+                <div className="px-3.5 pt-2 pb-3">
+                  {/* Status Indicator Row */}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-900/90 border border-zinc-800 text-[9px] font-mono font-medium text-rose-400">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500 shadow-[0_0_6px_#f43f5e]" />
+                      </span>
+                      <span className="tracking-wider uppercase font-semibold">ACTIVE</span>
+                    </div>
+
+                    <span className="inline-flex items-center text-[10px] font-mono font-bold tracking-wider text-zinc-100 bg-white/5 border border-white/10 px-2 py-0.5 rounded uppercase">
+                      #TK-{tk.id}
+                    </span>
+                  </div>
+
+
+                  {/* Metric Display */}
+                  <div
+                    onClick={() => navigate(`/pos?order=${tk.id}`)}
+                    className="flex items-center justify-center py-1 mb-2.5 cursor-pointer"
+                  >
+                    <div className="text-[24px] sm:text-[26px] leading-tight font-extrabold text-white tracking-tight font-mono text-center drop-shadow-sm select-none">
+                      ₹{Number(tk.subtotal || tk.net_payable || tk.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons Container */}
+                  <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-zinc-800/70">
+                    {/* Cancel Order */}
+                    <button
+                      onClick={() => handleVoidTakeaway(tk)}
+                      className="inline-flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-lg bg-zinc-900/90 hover:bg-rose-950/40 border border-zinc-700/60 hover:border-rose-500/60 text-zinc-300 hover:text-rose-200 text-[10px] font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer shadow-sm"
+                      type="button"
+                    >
+                      <svg className="size-3 text-current" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1 1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      <span>Cancel</span>
+                    </button>
+
+                    {/* Pay Bill */}
+                    <button
+                      onClick={() => handlePayTakeaway(tk)}
+                      className="relative overflow-hidden inline-flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-lg bg-gradient-to-r from-rose-600 via-rose-500 to-rose-600 hover:from-rose-500 hover:to-rose-600 text-white text-[10px] font-bold tracking-tight shadow-[0_6px_18px_rgba(225,29,72,0.4)] hover:scale-[1.02] active:scale-95 transition-all duration-200 cursor-pointer"
+                      type="button"
+                    >
+                      {/* Subtle Continuous Shimmer Sweep */}
+                      <span className="pointer-events-none absolute inset-0 -top-full -bottom-full w-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 animate-shimmer" />
+                      <svg className="size-3 relative z-10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <span className="relative z-10">Pay</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
+          ))}
         </div>
-      </div>
+      )}
 
       {/* ── Edit Mode Banner ── */}
       {editing && (
@@ -350,28 +456,6 @@ export default function Tables() {
         />
       )}
 
-      {/* ── Quick Config Chips (owner only, non-edit mode) ── */}
-      {isOwner && !editing && rows.length > 0 && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
-          <h2 className="text-[10px] font-extrabold tracking-widest text-slate-400 uppercase mb-3">
-            Quick Table Config
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {rows.map((t) => {
-              const cfg = { AVAILABLE: 'bg-emerald-50 text-emerald-700 border-emerald-200', OCCUPIED: 'bg-rose-50 text-rose-700 border-rose-200', BILLED: 'bg-amber-50 text-amber-700 border-amber-200' }
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setFormTable(t)}
-                  className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-all hover:scale-105 active:scale-95 ${cfg[t.status] ?? 'bg-slate-50 text-slate-600 border-slate-200'} ${!t.is_active ? 'line-through opacity-40' : ''}`}
-                >
-                  T-{String(t.number).padStart(2,'0')} · {t.seats}S
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {/* ── Table Form Modal ── */}
       {formTable !== null && (
@@ -427,7 +511,7 @@ export default function Tables() {
           maxRedeemable={0}
           onClose={() => {
             setQuickCustomerOpen(false)
-            setPendingPayOrder(null)
+            setPendingOrder(null)
           }}
           onSaveAndProceed={handleQuickCustomerSave}
           onSkipAndProceed={handleQuickCustomerSkip}

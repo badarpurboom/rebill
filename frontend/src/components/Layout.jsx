@@ -11,19 +11,18 @@ const ROLE_TONE = {
   WAITER: 'bg-amber-100 text-amber-800 border-amber-200',
 }
 
-// Short caps label for Lumière vertical icon rail
-const SHORT_LABEL = {
-  '/': 'DASH',
-  '/pos': 'POS',
-  '/tables': 'MAP',
-  '/kot': 'KOT',
-  '/menu': 'MENU',
-  '/customers': 'CUST',
-  '/orders': 'ORDERS',
-  '/whatsapp': 'CHAT',
-  '/coupons': 'OFFERS',
-  '/reports': 'STATS',
-  '/settings': 'SETTING',
+const NAV_META = {
+  '/': { label: 'Dashboard', shortcut: '⌘1', tag: null },
+  '/pos': { label: 'Billing POS', shortcut: '⌘2', tag: 'Fast', isLive: true },
+  '/tables': { label: 'Floor Map', shortcut: '⌘3', tag: 'Live' },
+  '/kot': { label: 'Kitchen KOT', shortcut: '⌘K', tag: 'Live', isLive: true },
+  '/menu': { label: 'Menu Catalog', shortcut: '⌘M', tag: null },
+  '/customers': { label: 'Customers', shortcut: null, tag: 'CRM' },
+  '/orders': { label: 'Order History', shortcut: null, tag: 'Archive' },
+  '/whatsapp': { label: 'WhatsApp Console', shortcut: null, tag: 'Chat' },
+  '/coupons': { label: 'Coupons & Promos', shortcut: null, tag: 'Offers' },
+  '/reports': { label: 'Analytics & Reports', shortcut: null, tag: 'Live', isLive: true },
+  '/settings': { label: 'Settings & Staff', shortcut: '⌘,', tag: 'Admin', isSpin: true },
 }
 
 export default function Layout() {
@@ -39,8 +38,24 @@ export default function Layout() {
     navigate('/login', { replace: true })
   }
 
+  const handleMouseMove = (e) => {
+    const nav = e.currentTarget
+    const rect = nav.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    nav.style.setProperty('--mouse-x', `${x}px`)
+    nav.style.setProperty('--mouse-y', `${y}px`)
+  }
+
+  const userInitials = (user?.full_name || user?.username || 'ReBill')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
   return (
-    <div className="flex h-full bg-[#f9f9f8] text-slate-800 selection:bg-rose-100 selection:text-rose-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#f9f9f8] text-slate-800 selection:bg-rose-100 selection:text-rose-900">
       {/* Mobile Backdrop */}
       {open && (
         <div
@@ -50,130 +65,216 @@ export default function Layout() {
         />
       )}
 
-      {/* Exact Lumière POS Vertical Icon Rail Navigation Sidebar */}
+      {/* Desktop Curved Vertical Navigation Strip Container (Seamless with page background) */}
+      <aside className="no-print hidden lg:flex relative flex-col items-center justify-center pl-3 pr-1.5 py-2 select-none bg-[#f9f9f8] z-30 shrink-0">
+        {/* Main Liquid Glass Pill Navigation Strip */}
+        <nav
+          onMouseMove={handleMouseMove}
+          className="relative w-[64px] rounded-[32px] flex flex-col items-center justify-between py-3 px-1 glass-pill-container backdrop-blur-2xl z-20 overflow-visible shadow-xl"
+          data-purpose="vertical-navigation-strip"
+        >
+          {/* Top Master Logo / Brand Badge */}
+          <div className="flex flex-col items-center w-full shrink-0">
+            <NavLink
+              to="/"
+              aria-label="ReBill POS Home"
+              className="group relative flex items-center justify-center focus:outline-none"
+            >
+              <div className="w-10 h-10 rounded-[14px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] flex items-center justify-center text-white glow-red hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer">
+                <IconChefHat className="w-5 h-5 stroke-[1.8] transition-transform duration-300 group-hover:rotate-12" />
+              </div>
+              {/* Logo Tooltip */}
+              <div className="nav-tooltip absolute left-[74px] top-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl whitespace-nowrap">
+                <span className="text-white text-xs font-semibold tracking-wide">ReBill POS</span>
+                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-white/10 text-rose-300 font-bold">
+                  PRO
+                </span>
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-[#0e101a] rotate-45 border-l border-b border-white/10" />
+              </div>
+            </NavLink>
+
+            {/* Micro divider under logo */}
+            <div className="w-6 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent mt-2 mb-1" />
+          </div>
+
+          {/* Main Navigation Items (Compact No-Scroll) */}
+          <div className="flex flex-col items-center space-y-1.5 w-full py-0.5 px-0.5">
+            {links.map((link) => {
+              const meta = NAV_META[link.to] || { label: link.label, shortcut: null, tag: null }
+              const isSpin = meta.isSpin
+              const isLive = meta.isLive
+
+              return (
+                <div
+                  key={link.to}
+                  className={`relative w-full flex justify-center nav-item group ${isSpin ? 'spin-on-hover' : ''}`}
+                  data-nav={link.to}
+                >
+                  <NavLink
+                    to={link.to}
+                    end={link.to === '/'}
+                    aria-label={meta.label}
+                    className={({ isActive }) =>
+                      `nav-btn relative flex items-center justify-center focus:outline-none cursor-pointer transition-all duration-300 ${
+                        isActive
+                          ? 'is-active w-9.5 h-9.5 rounded-[13px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] text-white glow-red'
+                          : 'w-9 h-9 rounded-[12px] text-slate-400 hover:text-white'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {/* Active Notch */}
+                        {isActive && <div className="active-notch" />}
+
+                        {/* Nav Icon */}
+                        <span className="w-4.5 h-4.5 flex items-center justify-center [&>svg]:size-[18px]">
+                          {link.icon}
+                        </span>
+
+                        {/* Live pulsating dot if applicable */}
+                        {isLive && !isActive && (
+                          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06B6D4]" />
+                        )}
+                      </>
+                    )}
+                  </NavLink>
+
+                  {/* Liquid Glass Spring Tooltip */}
+                  <div className="nav-tooltip absolute left-[74px] top-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl whitespace-nowrap">
+                    <span className="text-white text-xs font-medium">{meta.label}</span>
+                    {meta.shortcut && (
+                      <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-slate-300">
+                        {meta.shortcut}
+                      </kbd>
+                    )}
+                    {meta.tag && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
+                        {meta.tag}
+                      </span>
+                    )}
+                    <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-[#0e101a] rotate-45 border-l border-b border-white/10" />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Bottom Utility Group (Logout only) */}
+          <div className="flex flex-col items-center space-y-1.5 w-full shrink-0 pt-0.5">
+            {/* Minimalist Fading Separator */}
+            <div className="w-6 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent my-0.5" />
+
+            {/* Logout / Clock Out Action */}
+            <div className="relative w-full flex justify-center nav-item group" data-nav="logout">
+              <button
+                onClick={handleLogout}
+                aria-label="Logout / Clock Out"
+                title="Logout / Clock Out"
+                className="nav-btn w-9 h-9 rounded-[12px] flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-300 focus:outline-none cursor-pointer group"
+                type="button"
+              >
+                <svg
+                  className="w-4.5 h-4.5 group-hover:scale-110 transition-transform duration-300"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.36 6.64A9 9 0 1 1 5.64 6.64" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v10" />
+                </svg>
+              </button>
+              {/* Logout Tooltip */}
+              <div className="nav-tooltip absolute left-[74px] top-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl whitespace-nowrap">
+                <span className="text-rose-300 text-xs font-medium">Logout / Clock Out</span>
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-[#0e101a] rotate-45 border-l border-b border-white/10" />
+              </div>
+            </div>
+          </div>
+        </nav>
+      </aside>
+
+      {/* Mobile Slide-over Menu with Liquid Glass */}
       <aside
-        className={`no-print fixed inset-y-0 left-0 z-50 flex w-20 md:w-24 flex-col border-r border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xl lg:shadow-none
-          transition-transform duration-300 ease-out lg:static lg:translate-x-0 py-4 justify-between
+        className={`no-print fixed inset-y-0 left-0 z-50 flex flex-col items-center justify-center px-4 py-6 bg-slate-900/40 backdrop-blur-md border-r border-slate-200/20
+          transition-transform duration-300 ease-out lg:hidden
           ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        {/* Top Brand Chef Icon */}
-        <div className="flex flex-col items-center justify-center pb-3 border-b border-slate-100/80">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-rose-600 via-rose-500 to-rose-700 text-white shadow-md shadow-rose-600/30 ring-4 ring-rose-50">
-            <IconChefHat className="size-6 text-white" />
-          </div>
-          <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest mt-1">ReBill</span>
-        </div>
-
-        {/* Lumière Vertical Icon Navigation Rail Buttons */}
-        <nav className="scroll-thin flex-1 space-y-2.5 overflow-y-auto px-2 py-4 flex flex-col items-center">
-          {links.map((link) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.to === '/'}
-              onClick={() => setOpen(false)}
-              title={link.label}
-              className={({ isActive }) =>
-                `w-full flex flex-col items-center justify-center rounded-2xl py-3 px-1 transition-all duration-150 active:scale-90 ${
-                  isActive
-                    ? 'bg-rose-600 text-white shadow-md shadow-rose-600/25 ring-2 ring-rose-500/20 font-black'
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/80 font-bold'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <span className={`size-6 transition-transform duration-150 ${isActive ? 'scale-110 text-white' : 'text-slate-500'}`}>
-                    {link.icon}
-                  </span>
-                  <span className="text-[10px] font-extrabold uppercase tracking-widest mt-1">
-                    {SHORT_LABEL[link.to] || link.label.slice(0, 5)}
-                  </span>
-                </>
-              )}
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* Sync Status Badge & User Avatar */}
-        <div className="px-2 pt-2 border-t border-slate-100 flex flex-col items-center gap-2">
-          {/* Sync Status Indicator Button */}
-          <button
-            onClick={() => triggerSync(true)}
-            disabled={isSyncing}
-            title={
-              !isOnline
-                ? `Offline (${pendingCount} pending bills/actions) — Click to retry sync`
-                : isSyncing
-                ? 'Syncing offline records to cloud...'
-                : pendingCount > 0
-                ? `${pendingCount} items waiting to sync — Click to sync now`
-                : 'Hybrid Engine: Online & Synced'
-            }
-            className={`w-full flex flex-col items-center justify-center p-1.5 rounded-xl border transition-all active:scale-95 ${
-              !isOnline
-                ? 'bg-amber-50 border-amber-300 text-amber-800'
-                : isSyncing
-                ? 'bg-blue-50 border-blue-300 text-blue-800 animate-pulse'
-                : pendingCount > 0
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <div className="flex items-center gap-1">
-              <span
-                className={`size-2 rounded-full ${
-                  !isOnline
-                    ? 'bg-amber-500'
-                    : isSyncing
-                    ? 'bg-blue-500'
-                    : 'bg-emerald-500'
-                }`}
-              />
-              <span className="text-[9px] font-black tracking-wider uppercase">
-                {!isOnline ? 'OFFLINE' : isSyncing ? 'SYNCING' : 'ONLINE'}
-              </span>
+        <nav
+          onMouseMove={handleMouseMove}
+          className="relative w-[78px] h-full max-h-[780px] rounded-[40px] flex flex-col items-center justify-between py-4.5 glass-pill-container backdrop-blur-2xl z-20"
+        >
+          {/* Top Logo */}
+          <div className="flex flex-col items-center w-full shrink-0">
+            <div className="w-12 h-12 rounded-[18px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] flex items-center justify-center text-white glow-red">
+              <IconChefHat className="w-6 h-6 stroke-[1.8]" />
             </div>
-            {pendingCount > 0 && (
-              <span className="text-[8px] font-bold text-amber-700 bg-amber-200/80 rounded-full px-1.5 mt-0.5">
-                {pendingCount} wait
-              </span>
-            )}
-          </button>
-
-          <div
-            title={`${user?.full_name || user?.username} (${user?.custom_role?.name || user?.role_display || user?.role})`}
-            className="flex size-9 items-center justify-center rounded-xl bg-slate-100 text-xs font-black text-slate-800 border border-slate-200"
-          >
-            {(user?.full_name || user?.username || '?').charAt(0).toUpperCase()}
+            <div className="w-7 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent mt-3 mb-1" />
           </div>
-          <button
-            onClick={handleLogout}
-            title="Logout / Clock Out"
-            className="w-full flex items-center justify-center rounded-xl p-2.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 active:scale-90 transition-all border border-slate-200/70 group"
-          >
-            <svg className="size-5 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <path d="M18.36 6.64A9 9 0 1 1 5.64 6.64" />
-              <line x1="12" y1="2" x2="12" y2="12" />
-            </svg>
-          </button>
-        </div>
+
+          {/* Links */}
+          <div className="scroll-thin flex flex-col items-center space-y-2.5 w-full overflow-y-auto py-1 px-1">
+            {links.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.to === '/'}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  `nav-btn relative flex items-center justify-center transition-all duration-300 ${
+                    isActive
+                      ? 'is-active w-12 h-12 rounded-[18px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] text-white glow-red'
+                      : 'w-11 h-11 rounded-[16px] text-slate-400 hover:text-white'
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && <div className="active-notch" />}
+                    <span className="size-5 flex items-center justify-center">{link.icon}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
+
+          {/* Bottom Logout */}
+          <div className="flex flex-col items-center space-y-2.5 w-full shrink-0">
+            <button
+              onClick={() => {
+                setOpen(false)
+                handleLogout()
+              }}
+              className="w-11 h-11 rounded-[16px] flex items-center justify-center text-slate-400 hover:text-rose-400"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.36 6.64A9 9 0 1 1 5.64 6.64" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v10" />
+              </svg>
+            </button>
+          </div>
+        </nav>
       </aside>
 
       {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f9f9f8]">
         {/* Mobile Header Bar */}
-        <header className="no-print flex h-16 items-center justify-between border-b border-slate-200/80 bg-white px-4 lg:hidden shadow-xs">
+        <header className="no-print flex h-14 items-center justify-between border-b border-slate-200/80 bg-white px-4 lg:hidden shadow-xs">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setOpen(true)}
               aria-label="Open menu"
-              className="rounded-xl border border-slate-200 p-2.5 text-slate-700 hover:bg-slate-50 active:scale-95 transition"
+              className="rounded-xl border border-slate-200 p-2 text-slate-700 hover:bg-slate-50 active:scale-95 transition"
             >
-              ☰
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
             <div className="flex items-center gap-2">
-              <IconChefHat className="size-6 text-rose-600" />
+              <div className="size-8 rounded-xl bg-gradient-to-b from-[#FF5436] to-[#E8143A] flex items-center justify-center text-white glow-red-sm">
+                <IconChefHat className="size-4 text-white" />
+              </div>
               <span className="font-black text-slate-900 tracking-tight">ReBill POS</span>
             </div>
           </div>
@@ -181,7 +282,7 @@ export default function Layout() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => triggerSync(true)}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[10px] font-bold ${
                 !isOnline
                   ? 'bg-amber-50 border-amber-300 text-amber-800'
                   : isSyncing
@@ -208,7 +309,7 @@ export default function Layout() {
         {/* Viewport */}
         <main
           className={`scroll-thin flex flex-1 flex-col min-h-0 overflow-y-auto bg-[#f9f9f8] animate-fade-in ${
-            location.pathname === '/pos' ? 'p-0' : 'p-4 sm:p-6 lg:p-8'
+            location.pathname === '/pos' ? 'p-0' : 'p-3 sm:p-4 lg:p-5'
           }`}
         >
           <Outlet />
@@ -217,3 +318,4 @@ export default function Layout() {
     </div>
   )
 }
+

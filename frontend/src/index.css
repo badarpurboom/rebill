@@ -90,3 +90,360 @@ h1, h2, h3, h4, h5, h6 {
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(226, 232, 240, 0.8);
 }
+
+/* Custom Styles: Canvas Dot Grid, Aurora & Liquid Glass Physics */
+.bg-dot-matrix {
+  background-color: #05060b;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Liquid Glass & Specular highlights */
+.glass-pill-container {
+  background: linear-gradient(180deg, #141724 0%, #090b12 100%);
+  box-shadow: 
+    0 24px 48px -12px rgba(15, 23, 42, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.05);
+  position: relative;
+}
+
+/* Interactive mouse spotlight on nav pill */
+.glass-pill-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(120px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 255, 255, 0.09), transparent 75%);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.glass-pill-container:hover::before {
+  opacity: 1;
+}
+
+/* Red neon glow */
+.glow-red {
+  box-shadow: 0 0 22px 2px rgba(255, 45, 65, 0.65), 0 0 8px rgba(255, 50, 70, 0.45);
+}
+.glow-red-sm {
+  box-shadow: 0 0 14px rgba(255, 45, 65, 0.5);
+}
+
+/* Active Notch with Aurora pulse */
+.active-notch {
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3.5px;
+  height: 18px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #FF6644 0%, #FF1C43 100%);
+  box-shadow: 0 0 12px 2px rgba(255, 40, 65, 0.95);
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Ultra-smooth icon interactive hover & spring */
+.nav-btn {
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  z-index: 5;
+}
+.nav-item:hover .nav-btn:not(.is-active) {
+  transform: translateX(3px) scale(1.08);
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 6px 16px -3px rgba(0, 0, 0, 0.5), 0 0 12px -2px rgba(255, 255, 255, 0.12);
+}
+.nav-item:hover .nav-btn.is-active {
+  transform: translateX(2px) scale(1.04);
+}
+
+/* Smooth spin for settings */
+.spin-on-hover:hover svg {
+  transform: rotate(75deg);
+}
+
+/* Spring-loaded Liquid Glass Tooltip */
+.nav-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateX(18px) translateY(-50%) scale(0.92);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(14, 16, 26, 0.94);
+  box-shadow: 0 14px 30px -4px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  z-index: 999;
+}
+.nav-item:hover .nav-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(0) translateY(-50%) scale(1);
+}
+
+/* Bell ring animation */
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(15deg); }
+  40% { transform: rotate(-13deg); }
+  60% { transform: rotate(8deg); }
+  80% { transform: rotate(-5deg); }
+}
+
+.animate-bell-ring {
+  animation: bell-ring 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Sliding pill indicator smooth glide transition */
+.pill-glider {
+  transition: transform 0.36s cubic-bezier(0.2, 0.85, 0.32, 1.2), width 0.36s cubic-bezier(0.2, 0.85, 0.32, 1.2);
+  will-change: transform, width;
+}
+
+/* Button Morphism & Tactile Glass Effects */
+.btn-morphism-container {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(243, 245, 249, 0.85) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 4px 16px -2px rgba(15, 23, 42, 0.08),
+    0 1px 3px 0 rgba(15, 23, 42, 0.04),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 2px 0 rgba(0, 0, 0, 0.04);
+}
+
+.btn-morphism-glider {
+  background: linear-gradient(135deg, #FF385C 0%, #E11D48 60%, #BE123C 100%);
+  box-shadow:
+    0 4px 14px -1px rgba(225, 29, 72, 0.45),
+    0 1px 4px 0 rgba(225, 29, 72, 0.3),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.btn-morphism-icon {
+  background: linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 6px 16px -3px rgba(15, 23, 42, 0.09),
+    0 2px 4px -1px rgba(15, 23, 42, 0.04),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 1.5px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-morphism-icon:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    0 8px 20px -3px rgba(15, 23, 42, 0.13),
+    0 3px 6px -1px rgba(15, 23, 42, 0.06),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 1);
+}
+
+.btn-morphism-icon:active {
+  transform: translateY(1px) scale(0.96);
+  box-shadow:
+    0 2px 6px -1px rgba(15, 23, 42, 0.06),
+    inset 0 2px 4px 0 rgba(0, 0, 0, 0.08);
+}
+
+/* Ambient Luxury Border Glow */
+.luxury-panel {
+  position: relative;
+  background: #FFFFFF;
+  box-shadow: 
+    0 1px 3px rgba(11, 15, 23, 0.04),
+    0 6px 20px rgba(11, 15, 23, 0.04);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.luxury-panel:hover {
+  box-shadow: 
+    0 2px 6px rgba(11, 15, 23, 0.05),
+    0 12px 28px rgba(11, 15, 23, 0.07);
+}
+
+/* Subtle Glass Border Layer */
+.luxury-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(226, 232, 240, 0.6) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Shimmer Button Effect */
+.shimmer-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    60deg, 
+    transparent 30%, 
+    rgba(255, 255, 255, 0.22) 50%, 
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.75s ease;
+}
+
+.shimmer-btn:hover::after {
+  transform: translateX(100%);
+}
+
+@keyframes radarWave {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  70%, 100% { transform: scale(2.2); opacity: 0; }
+}
+
+.animate-radar-wave {
+  animation: radarWave 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes subtlePulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.85; }
+}
+
+.animate-subtle-pulse {
+  animation: subtlePulse 2.5s infinite ease-in-out;
+}
+
+/* Boutique Die-Cut Carry Bag Styling */
+.die-cut-handle {
+  position: relative;
+  width: 76px;
+  height: 18px;
+  margin: 0 auto;
+  border-radius: 9999px;
+  background: #f9f9f8;
+  transition: all 0.3s ease;
+}
+
+.crimp-seal {
+  height: 5px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0px,
+    rgba(255, 255, 255, 0.05) 3px,
+    rgba(0, 0, 0, 0.35) 3px,
+    rgba(0, 0, 0, 0.35) 6px
+  );
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+@keyframes handleGlow {
+  0% {
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7), 0 0 0 2px #26161c, 0 0 10px rgba(225, 29, 72, 0.35);
+    border-color: rgba(225, 29, 72, 0.5);
+  }
+  100% {
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 0 0 2px #3b141d, 0 0 24px rgba(225, 29, 72, 0.8);
+    border-color: rgba(255, 60, 110, 0.9);
+  }
+}
+
+.animate-glow-pulse {
+  animation: handleGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes shimmerSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-shimmer {
+  animation: shimmerSweep 2.5s infinite linear;
+}
+
+/* Soft ambient background gradient grid */
+.bg-grid-pattern {
+  background-size: 32px 32px;
+  background-image: 
+    radial-gradient(circle, rgba(100, 116, 139, 0.10) 1px, transparent 1px);
+}
+
+/* Refined focus styling */
+.field-input:focus {
+  border-color: #f43f5e;
+  box-shadow: 0 0 0 4px rgba(244, 63, 94, 0.14);
+}
+
+/* Button pulsating halo */
+@keyframes pulseHalo {
+  0% {
+    transform: scale(0.97);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(0.97);
+    opacity: 0.6;
+  }
+}
+
+.btn-halo {
+  animation: pulseHalo 3.2s ease-in-out infinite;
+}
+
+/* Card subtle ambient breathing border */
+.card-ambient-hover {
+  transition: box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-ambient-hover:hover {
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(225, 29, 72, 0.18), 0 8px 30px -4px rgba(225, 29, 72, 0.08);
+  border-color: rgba(244, 63, 94, 0.35);
+  transform: translateY(-2px);
+}
+
+/* Smooth interactive button transitions */
+.login-btn-animated {
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.login-btn-animated:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 14px 30px -3px rgba(225, 29, 72, 0.48), 0 6px 14px rgba(225, 29, 72, 0.32);
+}
+.login-btn-animated:active:not(:disabled) {
+  transform: scale(0.96) translateY(0);
+  box-shadow: 0 4px 12px -2px rgba(225, 29, 72, 0.45);
+}
+
+.shadow-subtle-card {
+  box-shadow: 0 20px 45px -15px rgba(15, 23, 42, 0.08), 0 0 1px 1px rgba(15, 23, 42, 0.04);
+}
+
+.shadow-btn-crimson {
+  box-shadow: 0 10px 25px -4px rgba(225, 29, 72, 0.38), 0 4px 10px -2px rgba(225, 29, 72, 0.22);
+}
+
+
+
+

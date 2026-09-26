@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, useRef, useLayoutEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { categories as categoryApi, items as itemApi } from '@/services/menu'
 import { tables as tableApi } from '@/services/tables'
@@ -9,13 +9,13 @@ import { PageLoader } from '@/components/ui/Misc'
 import {
   IconPos,
   IconTables,
-  IconSparkles,
   IconReceipt,
   IconChefHat,
 } from '@/components/ui/Icons'
 
 export default function Dashboard() {
   const { user, role } = useAuth()
+  const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [tableStats, setTableStats] = useState({ available: 0, occupied: 0, total: 0, billed: 0, occupancyPercent: 0 })
   const [salesSummary, setSalesSummary] = useState({ todaySales: 0, totalBills: 0, avgBill: 0, trend: 'Live' })
@@ -23,18 +23,120 @@ export default function Dashboard() {
   const [hourlyCurve, setHourlyCurve] = useState([])
   const [paymentBreakdown, setPaymentBreakdown] = useState({ upi_pct: 0, upi_amount: '0', card_pct: 0, card_amount: '0', cash_pct: 0, cash_amount: '0' })
   const [dineinPercent, setDineinPercent] = useState(0)
-  const [topDishes, setTopDishes] = useState([])
   const [timeFilter, setTimeFilter] = useState('today')
   const [hoveredPoint, setHoveredPoint] = useState(null)
+  const [bellRinging, setBellRinging] = useState(false)
 
+  // Sliding pill indicator smooth glide transition
+  const containerRef = useRef(null)
+  const buttonsRef = useRef({})
+  const [gliderStyle, setGliderStyle] = useState({ left: 0, width: 0, opacity: 0 })
+
+  const updateGlider = () => {
+    const activeBtn = buttonsRef.current[timeFilter]
+    const container = containerRef.current
+    if (activeBtn && container) {
+      const containerRect = container.getBoundingClientRect()
+      const btnRect = activeBtn.getBoundingClientRect()
+      if (btnRect.width > 0) {
+        setGliderStyle({
+          left: btnRect.left - containerRect.left,
+          width: btnRect.width,
+          opacity: 1,
+        })
+      }
+    }
+  }
+
+  useLayoutEffect(() => {
+    updateGlider()
+  }, [timeFilter, stats])
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(updateGlider)
+    return () => cancelAnimationFrame(frame)
+  }, [timeFilter, stats])
+
+  useEffect(() => {
+    const handleResize = () => updateGlider()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [timeFilter])
+
+  // Keyboard F2 Shortcut for POS Terminal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault()
+        navigate('/pos')
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [navigate])
+
+  const handleBellClick = () => {
+    setBellRinging(true)
+    setTimeout(() => setBellRinging(false), 700)
+  }
+
+  const summaryCache = useRef({})
+  const tablesRef = useRef([])
+
+  const applySummary = (summary, tbls = tablesRef.current) => {
+    if (!summary) return
+    setSalesSummary({
+      todaySales: Number(summary.today_sales || 0),
+      totalBills: summary.total_bills || 0,
+      avgBill: Number(summary.avg_ticket || 0),
+      trend: summary.sales_trend || 'Live',
+    })
+    if (summary.table_stats) {
+      setTableStats({
+        total: summary.table_stats.total || tbls.length,
+        occupied: summary.table_stats.occupied || 0,
+        billed: summary.table_stats.billed || 0,
+        available: summary.table_stats.available || 0,
+        occupancyPercent: summary.table_stats.occupancy_percent || 0,
+      })
+    }
+    setKitchenSpeed(summary.kitchen_speed || '12 mins')
+    setHourlyCurve(summary.hourly_curve || [])
+    setPaymentBreakdown(
+      summary.payment_breakdown || { upi_pct: 0, upi_amount: '0', card_pct: 0, card_amount: '0', cash_pct: 0, cash_amount: '0' }
+    )
+    setDineinPercent(summary.dinein_percent || 0)
+  }
+
+  // Handle instant smooth time filter change
+  const handleTimeFilterSelect = (newFilter) => {
+    setTimeFilter(newFilter)
+    if (summaryCache.current[newFilter]) {
+      // 0ms instant transition from cache
+      applySummary(summaryCache.current[newFilter])
+    }
+    // Background revalidate to ensure freshest live numbers
+    reportsService
+      .getDashboardSummary(newFilter)
+      .then((summary) => {
+        if (summary) {
+          summaryCache.current[newFilter] = summary
+          applySummary(summary)
+        }
+      })
+      .catch(() => {})
+  }
+
+  // Initial load
   useEffect(() => {
     Promise.all([
       categoryApi.list().catch(() => []),
       itemApi.list().catch(() => []),
       tableApi.list().catch(() => []),
-      reportsService.getDashboardSummary(timeFilter).catch(() => null),
+      reportsService.getDashboardSummary('today').catch(() => null),
     ])
-      .then(([cats, items, tbls, summary]) => {
+      .then(([cats, items, tbls, todaySummary]) => {
+        tablesRef.current = tbls
         setStats({
           categories: cats.length,
           items: items.length,
@@ -43,25 +145,9 @@ export default function Dashboard() {
           outOfStockList: items.filter((i) => !i.is_available).slice(0, 3),
         })
 
-        if (summary) {
-          setSalesSummary({
-            todaySales: Number(summary.today_sales || 0),
-            totalBills: summary.total_bills || 0,
-            avgBill: Number(summary.avg_ticket || 0),
-            trend: summary.sales_trend || 'Live',
-          })
-          setTableStats({
-            total: summary.table_stats.total || tbls.length,
-            occupied: summary.table_stats.occupied || 0,
-            billed: summary.table_stats.billed || 0,
-            available: summary.table_stats.available || 0,
-            occupancyPercent: summary.table_stats.occupancy_percent || 0,
-          })
-          setKitchenSpeed(summary.kitchen_speed || '12 mins')
-          setHourlyCurve(summary.hourly_curve || [])
-          setPaymentBreakdown(summary.payment_breakdown || { upi_pct: 0, upi_amount: '0', card_pct: 0, card_amount: '0', cash_pct: 0, cash_amount: '0' })
-          setDineinPercent(summary.dinein_percent || 0)
-          setTopDishes(summary.top_dishes || [])
+        if (todaySummary) {
+          summaryCache.current['today'] = todaySummary
+          applySummary(todaySummary, tbls)
         } else {
           const occupied = tbls.filter((t) => t.is_occupied || t.status === 'OCCUPIED').length
           const billed = tbls.filter((t) => t.status === 'BILLED').length
@@ -69,63 +155,159 @@ export default function Dashboard() {
           const occupancyPercent = tbls.length > 0 ? Math.round(((occupied + billed) / tbls.length) * 100) : 0
           setTableStats({ total: tbls.length, occupied, billed, available, occupancyPercent })
         }
+
+        // Prefetch 'week' and 'month' in background so switching is instant
+        reportsService
+          .getDashboardSummary('week')
+          .then((weekSum) => {
+            if (weekSum) summaryCache.current['week'] = weekSum
+          })
+          .catch(() => {})
+
+        reportsService
+          .getDashboardSummary('month')
+          .then((monthSum) => {
+            if (monthSum) summaryCache.current['month'] = monthSum
+          })
+          .catch(() => {})
       })
       .catch(() => {
         setStats({ categories: 0, items: 0, outOfStock: 0, veg: 0, outOfStockList: [] })
       })
+  }, [])
+
+  // Auto-refresh active filter every 15s in background
+  useEffect(() => {
+    const id = setInterval(() => {
+      reportsService
+        .getDashboardSummary(timeFilter)
+        .then((summary) => {
+          if (summary) {
+            summaryCache.current[timeFilter] = summary
+            applySummary(summary)
+          }
+        })
+        .catch(() => {})
+    }, 15000)
+    return () => clearInterval(id)
   }, [timeFilter])
 
   if (!stats) return <PageLoader label="Loading Executive Dashboard…" />
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
-      {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border border-slate-200/80 bg-white px-6 py-4 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-rose-50 border border-rose-100 text-rose-600">
-            <IconChefHat className="size-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">Executive Command Center</h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-700">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live
+    <div className="w-full space-y-5">
+      {/* BEGIN: Executive Command Center Header Bar */}
+      <section
+        className="w-full bg-white rounded-2xl md:rounded-3xl border border-slate-100 shadow-[0_12px_40px_-8px_rgba(15,23,42,0.06),0_2px_8px_-2px_rgba(15,23,42,0.03)] p-2.5 sm:p-3.5 transition-all duration-300 hover:shadow-[0_16px_45px_-8px_rgba(15,23,42,0.08),0_4px_12px_-2px_rgba(15,23,42,0.04)]"
+        data-purpose="executive-header-bar"
+      >
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
+          {/* Left Section: Cloche Icon + Title Badge */}
+          <div className="flex items-center gap-3.5 w-full lg:w-auto pl-1 sm:pl-2">
+            {/* Icon Squircle with Live Emerald Beacon */}
+            <div className="relative flex-shrink-0">
+              <div
+                className="w-12 h-12 rounded-2xl bg-rose-50/80 flex items-center justify-center text-rose-600 transition-transform duration-200 hover:scale-105"
+                title="Restaurant Command Service Active"
+              >
+                {/* Cloche / Restaurant Dome Icon */}
+                <svg className="w-6 h-6 stroke-current fill-none stroke-[2] stroke-linecap-round stroke-linejoin-round" viewBox="0 0 24 24">
+                  <circle className="fill-current stroke-none" cx="12" cy="7" r="1" />
+                  <path d="M4 15a8 8 0 0 1 16 0H4z" />
+                  <path className="fill-current opacity-90 stroke-none" d="M5 18h14l-1 2H6l-1-2z" />
+                  <line x1="3" x2="21" y1="18" y2="18" />
+                </svg>
+              </div>
+              {/* Animated Emerald Status Beacon */}
+              <span className="absolute -top-1 -right-1 flex h-4 w-4" title="Telemetry Live Connected">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white" />
               </span>
             </div>
-            <p className="text-xs font-semibold text-slate-400">
-              {user?.full_name || user?.username} ({user?.custom_role?.name || user?.role_display || user?.role}) · Real-time outlet metrics
-            </p>
-          </div>
-        </div>
 
-        {/* Date Filter & CTA */}
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-xl border border-slate-200/80 bg-slate-50 p-1 shadow-2xs">
-            {['today', 'week', 'month'].map((t) => (
+            {/* Title & Status Subline */}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-none">
+                  Executive Command Center
+                </h2>
+              </div>
+              <p className="text-xs text-slate-600 font-medium mt-1 hidden sm:block">
+                {user?.full_name || user?.username || 'Admin'} ({user?.custom_role?.name || user?.role_display || user?.role || 'Owner'}) <span className="text-slate-300">•</span> Real-time outlet metrics
+              </p>
+            </div>
+          </div>
+          {/* END Left Section */}
+
+          {/* Center-Right Controls: Time Range Segmented Switcher + Notification Bell */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-end gap-3 w-full lg:w-auto">
+            {/* Segmented Pill Time Filter with Smooth Gliding Indicator */}
+            <div
+              ref={containerRef}
+              className="relative flex items-center p-1 bg-slate-50/90 rounded-full border border-slate-100 shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]"
+              data-purpose="segmented-time-filter"
+            >
+              {/* Sliding Red Background Indicator */}
+              <div
+                aria-hidden="true"
+                style={{
+                  transform: `translateX(${gliderStyle.left}px)`,
+                  width: `${gliderStyle.width}px`,
+                  opacity: gliderStyle.opacity,
+                }}
+                className="pill-glider absolute left-0 top-1 bottom-1 bg-rose-600 rounded-full shadow-[0_4px_14px_-2px_rgba(225,29,72,0.4)] pointer-events-none"
+              />
+
+              {[
+                { id: 'today', label: 'Today' },
+                { id: 'week', label: 'This Week' },
+                { id: 'month', label: 'This Month' },
+              ].map((pill) => {
+                const isActive = timeFilter === pill.id
+                return (
+                  <button
+                    key={pill.id}
+                    ref={(el) => (buttonsRef.current[pill.id] = el)}
+                    type="button"
+                    onClick={() => handleTimeFilterSelect(pill.id)}
+                    className={`time-pill-btn relative z-10 px-3.5 sm:px-4 py-1.5 rounded-full text-xs transition-colors duration-200 select-none cursor-pointer ${
+                      isActive
+                        ? 'text-white font-semibold'
+                        : 'text-slate-500 hover:text-slate-900 font-medium'
+                    }`}
+                  >
+                    {pill.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Notification Bell Icon Button */}
+            <div className="relative">
               <button
-                key={t}
-                onClick={() => setTimeFilter(t)}
-                className={`rounded-lg px-3 py-1 text-xs font-bold capitalize transition-all ${
-                  timeFilter === t
-                    ? 'bg-rose-600 text-white shadow-xs font-black'
-                    : 'text-slate-600 hover:bg-white'
-                }`}
+                type="button"
+                onClick={handleBellClick}
+                aria-label="View notifications (1 unread)"
+                className="w-10 h-10 rounded-full bg-white border border-slate-200/80 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-50 transition-all duration-200 shadow-xs relative group focus:outline-none cursor-pointer"
               >
-                {t === 'today' ? 'Today' : t === 'week' ? 'This Week' : 'This Month'}
+                <svg
+                  className={`w-4 h-4 stroke-current fill-none stroke-[2] stroke-linecap-round stroke-linejoin-round transition-transform group-hover:scale-110 ${
+                    bellRinging ? 'animate-bell-ring' : ''
+                  }`}
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {/* Crimson Indicator Pip */}
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-600 ring-2 ring-white" />
               </button>
-            ))}
+            </div>
           </div>
-
-          <Link
-            to="/pos"
-            className="inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-black text-white shadow-md shadow-rose-600/20 active:scale-95 transition-all"
-          >
-            <IconPos className="size-4 text-white" />
-            POS Terminal
-          </Link>
+          {/* END Center-Right Controls */}
         </div>
-      </div>
+      </section>
+      {/* END: Executive Command Center Header Bar */}
 
       {/* Out-of-Stock Alert Strip */}
       {stats.outOfStock > 0 && (
@@ -223,49 +405,6 @@ export default function Dashboard() {
             <span>Dine-In vs Takeaway</span>
             <span className="text-rose-600 font-black">{dineinPercent}% Dine-In</span>
           </div>
-        </div>
-      </div>
-
-      {/* Row 3: Top Bestselling Dishes Leaderboard */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <IconSparkles className="size-4 text-rose-600" />
-              Top Bestselling Dishes Leaderboard
-            </h2>
-            <p className="text-[11px] text-slate-400 font-semibold">Highest performing dishes by revenue &amp; order volume</p>
-          </div>
-          <Link to="/menu" className="text-xs font-black text-rose-600 hover:underline">
-            View All Dishes →
-          </Link>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          {topDishes.map((item, idx) => (
-            <div
-              key={item.name + idx}
-              className="flex flex-col justify-between rounded-2xl border border-slate-200/70 bg-slate-50/50 p-3 transition-all hover:bg-white hover:border-rose-300 hover:shadow-xs"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="flex size-5 items-center justify-center rounded-md bg-rose-100 text-[10px] font-black text-rose-700">
-                    #{idx + 1}
-                  </span>
-                  <span className="text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                    {item.total_qty > 0 ? `${item.total_qty} Sold` : 'Available'}
-                  </span>
-                </div>
-                <p className="text-xs font-extrabold text-slate-900 truncate">{item.name}</p>
-                <p className="text-[10px] font-semibold text-slate-400">{item.portion ? `Portion: ${item.portion}` : item.category_name || 'Main'}</p>
-              </div>
-
-              <div className="mt-2 pt-1 border-t border-slate-200/60 flex items-center justify-between text-xs font-black text-slate-900">
-                <span>Revenue</span>
-                <span className="tabular">{item.total_revenue && item.total_revenue !== '0.00' ? money(item.total_revenue) : money(item.price || 0)}</span>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>
