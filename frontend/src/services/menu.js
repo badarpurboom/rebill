@@ -5,14 +5,20 @@ export const categories = {
   create: (payload) => api.post('/menu/categories/', payload).then((r) => r.data),
   update: (id, payload) => api.patch(`/menu/categories/${id}/`, payload).then((r) => r.data),
   remove: (id) => api.delete(`/menu/categories/${id}/`),
+  reorder: (order) => api.post('/menu/categories/reorder/', { order }).then((r) => r.data),
+  toggleActive: (id) => api.post(`/menu/categories/${id}/toggle_active/`).then((r) => r.data),
 }
 
 export const items = {
   list: (params) => api.get('/menu/items/', { params }).then((r) => r.data),
   create: (payload) => api.post('/menu/items/', payload).then((r) => r.data),
   update: (id, payload) => api.put(`/menu/items/${id}/`, payload).then((r) => r.data),
+  quickUpdate: (id, payload) => api.patch(`/menu/items/${id}/quick_update/`, payload).then((r) => r.data),
   remove: (id) => api.delete(`/menu/items/${id}/`),
   toggleStock: (id) => api.post(`/menu/items/${id}/toggle_stock/`).then((r) => r.data),
+  toggleVariantStock: (itemId, variantId) => api.post(`/menu/items/${itemId}/variants/${variantId}/toggle_stock/`).then((r) => r.data),
+  duplicate: (id) => api.post(`/menu/items/${id}/duplicate/`).then((r) => r.data),
+  bulkAction: (payload) => api.post('/menu/items/bulk_action/', payload).then((r) => r.data),
   clearAll: () => api.post('/menu/items/clear_all/').then((r) => r.data),
 
 

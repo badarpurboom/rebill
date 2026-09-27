@@ -58,6 +58,19 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
     let active = true
     const fetchPreview = async () => {
       try {
+        if (!order?.id) return
+
+        if (order.status === 'BILLED' && !bill) {
+          try {
+            const freshOrder = await orderApi.get(order.id)
+            if (active && freshOrder?.bill) {
+              setBill(freshOrder.bill)
+            }
+          } catch (e) {
+            console.error('Failed to fetch billed order details:', e)
+          }
+        }
+
         const payload = {
           discount_percent: discount === '' ? '0' : discount,
           redeem_points: redeemPoints,
@@ -78,7 +91,7 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
       fetchPreview()
     }
     return () => { active = false }
-  }, [order.id, discount, redeemPoints, paid])
+  }, [order?.id, discount, redeemPoints, paid])
 
   // Optimistic & Instant Local Order Recalculation
   const updateLocalOrderItems = (itemId, updates) => {
@@ -185,15 +198,41 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
     setBusy(true)
     setError('')
     try {
-      // 1. Online Attempt: Generate Bill
-      const payload = {
-        discount_percent: discount === '' ? '0' : discount,
-        redeem_points: redeemPoints,
+      let targetBill = bill || order?.bill
+
+      // If no bill in state yet, but order is BILLED, fetch latest order to get bill
+      if (!targetBill?.id && order?.status === 'BILLED') {
+        try {
+          const fresh = await orderApi.get(order.id)
+          if (fresh?.bill) {
+            targetBill = fresh.bill
+          }
+        } catch (e) {
+          console.error('Failed to fetch fresh order bill:', e)
+        }
       }
-      const newBill = await orderApi.generateBill(order.id, payload)
-      
-      // 2. Online Attempt: Pay Bill
-      const updated = await billApi.pay(newBill.id, mode)
+
+      // If no bill exists yet (running order), generate it online
+      if (!targetBill?.id) {
+        const payload = {
+          discount_percent: discount === '' ? '0' : discount,
+          redeem_points: redeemPoints,
+        }
+        try {
+          targetBill = await orderApi.generateBill(order.id, payload)
+        } catch (genErr) {
+          // Fallback if order was already billed
+          const fresh = await orderApi.get(order.id)
+          if (fresh?.bill) {
+            targetBill = fresh.bill
+          } else {
+            throw genErr
+          }
+        }
+      }
+
+      // Pay the Bill
+      const updated = await billApi.pay(targetBill.id, mode)
       setBill(updated)
       onPaid?.(updated)
     } catch (err) {

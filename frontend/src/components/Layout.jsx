@@ -308,8 +308,8 @@ export default function Layout() {
 
         {/* Viewport */}
         <main
-          className={`scroll-thin flex flex-1 flex-col min-h-0 overflow-y-auto bg-[#f9f9f8] animate-fade-in ${
-            location.pathname === '/pos' ? 'p-0' : 'p-3 sm:p-4 lg:p-5'
+          className={`scroll-thin flex flex-1 flex-col min-h-0 bg-[#f9f9f8] animate-fade-in ${
+            location.pathname === '/pos' ? 'p-0 overflow-hidden' : 'p-3 sm:p-4 lg:p-5 overflow-y-auto'
           }`}
         >
           <Outlet />
