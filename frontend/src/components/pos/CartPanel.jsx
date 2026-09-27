@@ -1,19 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { money, priceShort } from '@/utils/format'
-import Button from '@/components/ui/Button'
-import { Badge, FoodTypeDot } from '@/components/ui/Misc'
 import { couponsService } from '@/services/coupons'
-import { useAuth } from '@/context/AuthContext'
-import { hasPermission } from '@/utils/roles'
-import {
-  IconKitchen,
-  IconPlus,
-  IconMinus,
-  IconTrash,
-  IconPos,
-  IconReceipt,
-  IconSparkles,
-} from '@/components/ui/Icons'
 
 export default function CartPanel({
   order,
@@ -28,183 +15,300 @@ export default function CartPanel({
   sendingKot,
   generating,
 }) {
-  const { user } = useAuth()
   const items = order?.items ?? []
-  const unsentCount = items.filter((l) => !l.sent_to_kitchen).length
+  const unsentCount = items.filter((l) => !l.sent_to_kitchen && !l.kot).length
+  const totalCount = items.reduce((acc, curr) => acc + (curr.quantity || 1), 0)
+
+  // Subtotal, taxes, roundoff calculations
+  const rawSubtotal = useMemo(() => {
+    return items.reduce((acc, curr) => acc + Number(curr.unit_price) * curr.quantity, 0)
+  }, [items])
+
+  const taxAmount = useMemo(() => {
+    if (totals?.cgst_amount || totals?.sgst_amount) {
+      return Number(totals.cgst_amount || 0) + Number(totals.sgst_amount || 0)
+    }
+    return Math.round(rawSubtotal * 0.05 * 100) / 100 // 5% GST fallback
+  }, [rawSubtotal, totals])
+
+  const totalCalculated = useMemo(() => {
+    if (totals?.net_payable) return Number(totals.net_payable)
+    if (totals?.total) return Number(totals.total)
+    return Math.round(rawSubtotal + taxAmount)
+  }, [rawSubtotal, taxAmount, totals])
+
+  const roundOff = useMemo(() => {
+    const rawSum = rawSubtotal + taxAmount
+    return totalCalculated - rawSum
+  }, [rawSubtotal, taxAmount, totalCalculated])
+
+  const [activeItemId, setActiveItemId] = useState(null)
+  const [deletingIds, setDeletingIds] = useState(() => new Set())
+
+  const handleRemoveWithAnim = (line) => {
+    setDeletingIds((prev) => {
+      const next = new Set(prev)
+      next.add(line.id)
+      return next
+    })
+    setTimeout(() => {
+      onRemove(line)
+      setDeletingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(line.id)
+        return next
+      })
+    }, 250)
+  }
+
+  const handleQuantityWithAnim = (line, newQty) => {
+    if (newQty < 1) {
+      handleRemoveWithAnim(line)
+    } else {
+      onQuantity(line, newQty)
+    }
+  }
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col">
-      {/* Order Header */}
-      <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-        <div>
-          <h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-400">Order Summary</h2>
-          <p className="text-base font-black text-slate-900 flex items-center gap-2">
-            <IconPos className="size-4 text-rose-600" />
-            {order?.order_type === 'TAKEAWAY'
-              ? `Takeaway ${order?.tag_name ? `(${order.tag_name})` : 'Parcel'}`
-              : `Table ${order?.table_number ?? ''}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onAddCustomItem}
-            className="flex items-center gap-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 text-xs font-bold hover:bg-amber-100 transition-all active:scale-95 shadow-2xs"
-            title="Add a custom item not listed in the menu"
-          >
-            + Custom Item
-          </button>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-extrabold text-slate-700 border border-slate-200">
-            {items.length} {items.length === 1 ? 'item' : 'items'}
-          </span>
-        </div>
+    <aside
+      className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.04)] flex flex-col justify-between h-full min-h-0 overflow-hidden transition-colors duration-300"
+      data-purpose="order-summary-sidebar"
+      id="billingSidebar"
+    >
+      {/* Header: Count and Custom Item */}
+      <div className="shrink-0 flex items-center justify-between pb-2 mb-1 border-b border-slate-100">
+        <span
+          className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-rose-50 text-rose-600 transition-all duration-150 inline-block badge-pop"
+          id="cartItemsBadge"
+        >
+          {totalCount} {totalCount === 1 ? 'item' : 'items'}
+        </span>
+
+        <button
+          type="button"
+          onClick={onAddCustomItem}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50/80 hover:bg-amber-100/70 border border-amber-200/80 px-2.5 py-0.5 rounded-xl transition active:scale-95 duration-150 cursor-pointer"
+          id="customItemBtn"
+        >
+          <i className="fa-regular fa-plus-circle text-amber-600 text-xs"></i>
+          Custom Item
+        </button>
       </div>
 
-      {/* Cart Items List */}
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto pr-1">
+      {/* Order Items List */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto pr-1 my-1 transition-all rounded-xl scroll-thin"
+        id="cartItemsList"
+      >
         {items.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 py-12 text-center">
-            <div className="flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-              <IconPos className="size-7" />
-            </div>
-            <p className="text-sm font-extrabold text-slate-800">Cart is empty</p>
-            <p className="text-xs text-slate-400">Tap dishes from the left menu grid to add</p>
+          <div className="py-8 text-center text-slate-400">
+            <i className="fa-solid fa-cart-shopping text-2xl mb-1.5 text-slate-300 block"></i>
+            <p className="text-xs font-semibold text-slate-600">No items added to this order</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Select dishes from the menu catalog</p>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {items.map((line) => (
-              <li key={line.id} className="group flex items-start gap-2 py-1.5 transition-colors">
-                <FoodTypeDot foodType={line.food_type} className="mt-0.5" />
+          items.map((line) => {
+            const lineTotal = Number(line.unit_price) * line.quantity
+            const isHovered = activeItemId === line.id
+            const isDeleting = deletingIds.has(line.id)
+            return (
+              <div
+                key={line.id}
+                id={`cart-row-${line.id}`}
+                className={`cart-row-container mb-1.5 ${isDeleting ? 'is-deleting' : ''}`}
+              >
+                <div className="cart-row-inner">
+                  <div
+                    onMouseEnter={() => setActiveItemId(line.id)}
+                    onMouseLeave={() => setActiveItemId(null)}
+                    onClick={() => setActiveItemId(isHovered ? null : line.id)}
+                    className={`pos-cart-item rounded-xl border border-slate-200/90 bg-white px-3 py-2 sm:py-2.5 flex flex-col justify-between cursor-pointer transition-all duration-200 ${
+                      isHovered ? 'is-expanded' : ''
+                    }`}
+                    data-purpose="order-item"
+                  >
+                    {/* Default Line: Name + (Half) + x Qty --------- Price & Quick Delete */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
+                        <h3 className="text-sm font-extrabold text-slate-900 tracking-tight leading-none truncate">
+                          {line.item_name}
+                        </h3>
+                        {line.portion === 'HALF' && (
+                          <span className="text-[9px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200/80 px-1.5 py-0.2 rounded uppercase">
+                            Half
+                          </span>
+                        )}
+                        {(line.sent_to_kitchen || line.kot) && (
+                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.2 rounded shrink-0">
+                            ✓
+                          </span>
+                        )}
+                        <span className="text-xs font-black text-rose-600 bg-rose-50/80 border border-rose-100 px-1.5 py-0.2 rounded tabular shrink-0">
+                          x {line.quantity}
+                        </span>
+                        {line.note && (
+                          <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 rounded truncate max-w-[90px]">
+                            {line.note}
+                          </span>
+                        )}
+                      </div>
 
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-extrabold leading-tight text-slate-900">
-                    {line.item_name}
-                    {line.portion === 'HALF' && (
-                      <span className="ml-1 text-[10px] font-bold text-rose-600">(Half)</span>
-                    )}
-                  </p>
-                  <p className="tabular text-[11px] font-semibold text-slate-400 mt-0.5">
-                    {priceShort(line.unit_price)} × {line.quantity}
-                  </p>
-                  {line.note && <p className="text-[10px] text-amber-700 italic mt-0.5">↳ {line.note}</p>}
-                  {line.sent_to_kitchen && (
-                    <Badge tone="green" className="mt-0.5 text-[9px] px-1.5 py-0">
-                      Sent to Kitchen
-                    </Badge>
-                  )}
-                </div>
+                      {/* Right side: Total Price + Quick Delete button */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-sm sm:text-[15px] font-black text-slate-900 tabular">
+                          ₹{lineTotal.toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          title="Delete item"
+                          disabled={busyItemId === line.id || isDeleting}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveWithAnim(line)
+                          }}
+                          className="w-6 h-6 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition active:scale-90 cursor-pointer disabled:opacity-30"
+                        >
+                          <i className="fa-regular fa-trash-can text-xs"></i>
+                        </button>
+                      </div>
+                    </div>
 
-                <div className="flex flex-col items-end gap-1">
-                  <span className="tabular text-xs font-black text-slate-900">
-                    {priceShort(line.line_total)}
-                  </span>
-                  <div className="flex items-center gap-0.5">
-                    <QtyButton
-                      onClick={() => onQuantity(line, line.quantity - 1)}
-                      disabled={busyItemId === line.id}
-                      label="decrease"
-                    >
-                      <IconMinus className="size-2.5" />
-                    </QtyButton>
-                    <span className="tabular w-5 text-center text-[11px] font-black text-slate-800">
-                      {line.quantity}
-                    </span>
-                    <QtyButton
-                      onClick={() => onQuantity(line, line.quantity + 1)}
-                      disabled={busyItemId === line.id}
-                      label="increase"
-                    >
-                      <IconPlus className="size-2.5" />
-                    </QtyButton>
-                    <button
-                      onClick={() => onRemove(line)}
-                      disabled={busyItemId === line.id}
-                      aria-label={`Remove ${line.item_name}`}
-                      className="ml-0.5 rounded text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
-                    >
-                      <IconTrash className="size-3.5" />
-                    </button>
+                    {/* Hover / Expanded Controls */}
+                    <div className="pos-cart-controls flex items-center justify-between">
+                      {/* Left: Delete Button */}
+                      <button
+                        type="button"
+                        disabled={busyItemId === line.id || isDeleting}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRemoveWithAnim(line)
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-extrabold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 active:scale-95 transition-all cursor-pointer disabled:opacity-40 px-2.5 py-1 rounded-xl border border-rose-200/80 shadow-2xs"
+                      >
+                        <i className="fa-solid fa-trash-can text-xs text-rose-600"></i>
+                        <span>Delete</span>
+                      </button>
+
+                      {/* Middle: Unit Rate */}
+                      <span className="text-[11px] font-semibold text-slate-400 tabular hidden sm:inline">
+                        ₹{priceShort(line.unit_price)} each
+                      </span>
+
+                      {/* Right: Stepper Controls */}
+                      <div className="inline-flex items-center bg-slate-50 border border-slate-200/90 rounded-xl p-0.5 shadow-2xs">
+                        <button
+                          type="button"
+                          disabled={busyItemId === line.id || isDeleting}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleQuantityWithAnim(line, line.quantity - 1)
+                          }}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-slate-200/70 text-slate-700 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-sm font-black transition active:scale-90 cursor-pointer disabled:opacity-40 shadow-2xs"
+                          title="Decrease quantity"
+                        >
+                          -
+                        </button>
+                        <span className="w-7 text-center font-black text-slate-900 select-none tabular text-xs">
+                          {line.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={busyItemId === line.id || isDeleting}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleQuantityWithAnim(line, line.quantity + 1)
+                          }}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-900 text-white hover:bg-rose-600 text-sm font-black transition active:scale-90 cursor-pointer disabled:opacity-40 shadow-xs"
+                          title="Increase quantity"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </li>
-            ))}
-          </ul>
+              </div>
+            )
+          })
         )}
       </div>
 
-      {/* Cart Footer & Totals */}
-      <div className="mt-2 border-t border-slate-200/80 pt-2 space-y-2.5">
-        <Button
-          variant="secondary"
-          className="w-full justify-center py-2 rounded-xl border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs"
-          onClick={onSendKot}
-          loading={sendingKot}
-          disabled={unsentCount === 0}
-        >
-          <IconKitchen className="size-4 text-slate-700" />
-          {unsentCount > 0 ? `Send KOT (${unsentCount} new items)` : 'All items sent to kitchen'}
-        </Button>
+      {/* KOT Sync Indicator Pill / Action Button */}
+      {items.length > 0 && (
+        <div className="shrink-0 my-1.5" id="kotStatusPill">
+          {unsentCount === 0 ? (
+            <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs transition duration-200">
+              <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                <i className="fa-solid fa-circle-check text-emerald-600 text-sm"></i>
+                <span>Kitchen Synced (All Sent)</span>
+              </div>
+              <span className="text-[11px] font-extrabold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-lg">
+                Synced
+              </span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onSendKot}
+              disabled={sendingKot}
+              className="w-full flex items-center justify-between bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white border border-amber-600/20 rounded-xl px-3.5 py-2.5 text-sm font-extrabold transition active:scale-[0.98] duration-150 cursor-pointer shadow-md shadow-amber-500/20 disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2 text-white font-black text-xs sm:text-sm">
+                <span className="w-2 h-2 rounded-full bg-white inline-block animate-ping"></span>
+                <i className="fa-solid fa-fire-burner text-amber-100 text-sm"></i>
+                <span>Send KOT to Kitchen ({unsentCount} new)</span>
+              </div>
+              <span className="text-xs font-black text-amber-900 bg-white hover:bg-amber-50 px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
+                {sendingKot ? 'Sending...' : 'Send Now ➔'}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
 
+      {/* Calculation Breakdown & Bottom Buttons */}
+      <div className="shrink-0 pt-2 border-t border-slate-100 mt-auto">
+        {/* Total Amount */}
         <div className="flex items-baseline justify-between pt-0.5">
-          <span className={Number(totals?.redeem_amount ?? 0) > 0 ? 'text-xs font-bold text-slate-400' : 'font-black text-slate-900 text-sm'}>
-            Total Amount
-          </span>
-          <span
-            className={`tabular ${
-              Number(totals?.redeem_amount ?? 0) > 0
-                ? 'text-sm font-bold text-slate-400'
-                : 'text-xl font-black text-slate-900'
-            }`}
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-wide text-slate-600">
+              Total Amount
+            </p>
+          </div>
+          <div
+            className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight tabular"
+            id="totalAmountVal"
           >
-            {money(totals?.total ?? 0)}
-          </span>
+            ₹{totalCalculated.toFixed(2)}
+          </div>
         </div>
 
-        {Number(totals?.redeem_amount ?? 0) > 0 && (
-          <>
-            <div className="flex items-center justify-between text-xs py-0.5">
-              <span className="inline-flex items-center gap-1 font-bold text-rose-700 bg-rose-100/60 px-2 py-0.5 rounded-lg border border-rose-200">
-                <IconSparkles className="size-3 text-rose-600" />
-                Points ({totals.points_redeemed} Pts)
-              </span>
-              <span className="tabular font-extrabold text-rose-700">-{money(totals.redeem_amount)}</span>
-            </div>
-            <div className="flex items-baseline justify-between border-t border-slate-200 pt-2">
-              <span className="font-black text-slate-900 text-sm">Net Payable</span>
-              <span className="tabular text-2xl font-black text-rose-600">
-                {money(totals.net_payable)}
-              </span>
-            </div>
-          </>
-        )}
-
-        {/* Action CTAs */}
-        <div className="flex gap-2">
-          {hasPermission(user, 'print_bill') && (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="flex-1 justify-center py-2 text-xs font-bold border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl active:scale-95 transition-all"
-              onClick={onGenerateBill}
-              loading={generating}
-              disabled={items.length === 0}
-            >
-              Print Bill
-            </Button>
-          )}
-          {hasPermission(user, 'settle_bill') && (
-            <Button
-              size="sm"
-              className="flex-1 justify-center py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
-              onClick={onPayBill}
-              disabled={items.length === 0}
-            >
-              Pay & Settle
-            </Button>
-          )}
+        {/* Bottom Action Buttons */}
+        <div className="grid grid-cols-5 gap-2 mt-2.5">
+          <button
+            type="button"
+            onClick={onGenerateBill}
+            disabled={items.length === 0 || generating}
+            className="col-span-2 py-2.5 px-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-slate-700 text-xs font-bold inline-flex items-center justify-center gap-1.5 transition active:scale-95 duration-150 shadow-sm cursor-pointer disabled:opacity-50"
+            id="printBillBtn"
+          >
+            <i className="fa-solid fa-print text-xs"></i>
+            Print Bill
+          </button>
+          <button
+            type="button"
+            onClick={onPayBill}
+            disabled={items.length === 0}
+            className="col-span-3 py-2.5 px-3 rounded-xl bg-brand hover:bg-rose-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition duration-150 shadow-md shadow-rose-500/20 active:scale-95 cursor-pointer disabled:opacity-50"
+            id="paySettleBtn"
+          >
+            <i className="fa-solid fa-bolt text-xs"></i>
+            Pay & Settle
+          </button>
         </div>
       </div>
-    </div>
+    </aside>
   )
 }
 
@@ -241,7 +345,7 @@ export function LoyaltyRow({ totals, redeemPoints, onRedeemChange, hasCustomer }
     <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-3">
       <div className="mb-1.5 flex items-center justify-between text-xs font-extrabold text-rose-900">
         <span className="flex items-center gap-1.5">
-          <IconSparkles className="size-4 text-rose-600" />
+          <i className="fa-solid fa-wand-magic-sparkles text-rose-600"></i>
           Redeem Loyalty Points
         </span>
         <span className="text-rose-700 font-semibold">
@@ -259,12 +363,12 @@ export function LoyaltyRow({ totals, redeemPoints, onRedeemChange, hasCustomer }
           value={applied || ''}
           onChange={(e) => onRedeemChange(Math.max(0, Math.min(max, Number(e.target.value) || 0)))}
           placeholder="0"
-          className="focus:border-rose-500 focus:ring-rose-200 w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold focus:ring-2 focus:outline-none"
+          className="focus:border-rose-500 focus:ring-rose-200 w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold focus:ring-2 focus:outline-none tabular"
         />
         <button
           type="button"
           onClick={() => onRedeemChange(applied === max ? 0 : max)}
-          className="rounded-xl bg-rose-600 px-3.5 py-1.5 text-xs font-black text-white transition hover:bg-rose-700 shadow-xs"
+          className="rounded-xl bg-rose-600 px-3.5 py-1.5 text-xs font-black text-white transition hover:bg-rose-700 shadow-xs cursor-pointer"
         >
           {applied === max ? 'Remove' : 'Max'}
         </button>
@@ -273,28 +377,6 @@ export function LoyaltyRow({ totals, redeemPoints, onRedeemChange, hasCustomer }
       {willEarn > 0 && (
         <p className="mt-1.5 text-[11px] font-bold text-emerald-700">Will earn +{willEarn} points on this bill.</p>
       )}
-    </div>
-  )
-}
-
-function QtyButton({ children, onClick, disabled, label }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      className="size-6 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-black text-slate-700 transition hover:bg-slate-100 active:scale-95 disabled:opacity-40"
-    >
-      {children}
-    </button>
-  )
-}
-
-function TotalRow({ label, value, tone = 'text-slate-800' }) {
-  return (
-    <div className="flex justify-between">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className={`tabular font-bold ${tone}`}>{money(value ?? 0)}</dd>
     </div>
   )
 }
@@ -328,7 +410,7 @@ export function CouponInput({ subtotal, customerId, onApplyDiscount }) {
     <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 p-2.5 h-full">
       <div className="mb-1 flex items-center justify-between text-xs font-extrabold text-slate-700">
         <span className="flex items-center gap-1">
-          <IconReceipt className="size-3.5 text-slate-500" />
+          <i className="fa-solid fa-receipt text-slate-500"></i>
           Coupon
         </span>
       </div>
@@ -343,7 +425,7 @@ export function CouponInput({ subtotal, customerId, onApplyDiscount }) {
         <button
           type="submit"
           disabled={loading || !code.trim()}
-          className="rounded-xl bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800 disabled:opacity-50 shrink-0"
+          className="rounded-xl bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800 disabled:opacity-50 shrink-0 cursor-pointer"
         >
           {loading ? '...' : 'Apply'}
         </button>
@@ -378,7 +460,7 @@ export function DiscountInput({ discount, onChangeDiscount, subtotal = 0 }) {
           <button
             type="button"
             onClick={() => onChangeDiscount('')}
-            className="text-[10px] font-bold text-rose-600 hover:underline"
+            className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
           >
             Clear ({discount}%)
           </button>
@@ -395,7 +477,7 @@ export function DiscountInput({ discount, onChangeDiscount, subtotal = 0 }) {
             value={discount}
             onChange={(e) => onChangeDiscount(e.target.value)}
             placeholder="0"
-            className="w-full rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 pr-6 font-mono text-xs font-bold text-slate-900 focus:border-rose-500 focus:outline-none"
+            className="w-full rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 pr-6 font-mono text-xs font-bold text-slate-900 focus:border-rose-500 focus:outline-none tabular"
           />
           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">
             %
@@ -409,7 +491,7 @@ export function DiscountInput({ discount, onChangeDiscount, subtotal = 0 }) {
               key={pct}
               type="button"
               onClick={() => onChangeDiscount(String(pct))}
-              className={`rounded-lg px-2 py-1.5 text-[10px] font-black transition ${
+              className={`rounded-lg px-2 py-1.5 text-[10px] font-black transition cursor-pointer ${
                 String(discount) === String(pct)
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95'
@@ -426,13 +508,12 @@ export function DiscountInput({ discount, onChangeDiscount, subtotal = 0 }) {
           <span className="font-semibold text-emerald-800">
             Save ₹{discountAmount.toFixed(2)} ({numDiscount}%)
           </span>
-          <span className="font-bold text-emerald-900">
-            New Subtotal: ₹{netAfterDiscount.toFixed(2)}
+          <span className="font-bold text-emerald-900 tabular">
+            New: ₹{netAfterDiscount.toFixed(2)}
           </span>
         </div>
       )}
     </div>
   )
 }
-
 

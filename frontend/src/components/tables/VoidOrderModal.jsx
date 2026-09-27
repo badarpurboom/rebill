@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import Modal from '@/components/ui/Modal'
-import Button from '@/components/ui/Button'
 
 export default function VoidOrderModal({ order, table, onClose, onConfirm }) {
   const [loading, setLoading] = useState(false)
@@ -13,42 +11,62 @@ export default function VoidOrderModal({ order, table, onClose, onConfirm }) {
     ? `Takeaway Parcel #TK-${targetObj.id}`
     : `Table ${targetObj.number || targetObj.table_number}`
 
+  const itemCount = targetObj.items?.length || targetObj.item_count || 0
+
   const handleConfirm = async () => {
     setLoading(true)
-    await onConfirm(targetObj)
-    setLoading(false)
+    try {
+      await onConfirm(targetObj)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <Modal
-      open={!!targetObj}
-      onClose={onClose}
-      title={`Cancel ${label}`}
-      size="sm"
-    >
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 rounded-xl bg-rose-50 p-4 text-rose-800 border border-rose-200">
-          <svg className="size-6 shrink-0 text-rose-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <div className="text-xs font-semibold leading-relaxed">
-            Are you sure you want to cancel the active order for <strong className="font-extrabold text-rose-900">{label}</strong>?
-          </div>
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-200">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl transform transition-all duration-200 scale-100">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-rose-600 flex items-center gap-2">
+            <i className="fa-regular fa-trash-can"></i> Void Current Order?
+          </h3>
+          <button
+            type="button"
+            className="text-slate-400 hover:text-slate-600 cursor-pointer"
+            onClick={onClose}
+          >
+            <i className="fa-solid fa-xmark text-sm"></i>
+          </button>
         </div>
 
-        <p className="text-xs text-slate-500">
-          This action will void all unbilled items on this order and remove it from active orders.
-        </p>
+        <div className="py-4 text-xs font-medium text-slate-600 space-y-2">
+          <p>
+            Are you sure you want to void all{' '}
+            <strong className="text-slate-800 font-bold">{itemCount} items</strong> on {label}?
+          </p>
+          <p className="text-slate-400 text-[11px]">
+            This action will notify the kitchen display and remove all running KOT tickets.
+          </p>
+        </div>
 
-        <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
-          <Button variant="secondary" onClick={onClose} disabled={loading} size="sm">
+        <div className="pt-2 border-t border-slate-100 flex justify-end gap-2 text-xs font-bold">
+          <button
+            type="button"
+            className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 cursor-pointer transition"
+            onClick={onClose}
+            disabled={loading}
+          >
             Keep Order
-          </Button>
-          <Button variant="danger" onClick={handleConfirm} loading={loading} size="sm">
-            Cancel Order
-          </Button>
+          </button>
+          <button
+            type="button"
+            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition active:scale-95 shadow-sm cursor-pointer disabled:opacity-50"
+            onClick={handleConfirm}
+            disabled={loading}
+          >
+            {loading ? 'Voiding...' : 'Yes, Void Order'}
+          </button>
         </div>
       </div>
-    </Modal>
+    </div>
   )
 }

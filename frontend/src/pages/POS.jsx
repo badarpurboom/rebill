@@ -237,11 +237,48 @@ export default function POS() {
         await saveOfflineRunningOrder(updatedOrder)
         setOrder(updatedOrder)
       } else {
+        // Instant Optimistic UI Update - 0ms delay!
+        setOrder((prev) => {
+          if (!prev) return prev
+          const existing = (prev.items || []).find((it) => it.variant === variant.id)
+          let updatedItems = []
+          if (existing) {
+            updatedItems = (prev.items || []).map((it) =>
+              it.variant === variant.id
+                ? {
+                    ...it,
+                    quantity: it.quantity + 1,
+                    line_total: ((it.quantity + 1) * Number(it.unit_price)).toFixed(2),
+                  }
+                : it
+            )
+          } else {
+            const newItem = {
+              id: 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+              variant: variant.id,
+              item_name: variant.item_name || variant.name || 'Item',
+              portion: variant.portion || 'FULL',
+              food_type: variant.food_type || 'VEG',
+              unit_price: String(variant.price),
+              quantity: 1,
+              line_total: String(variant.price),
+              kot: null,
+            }
+            updatedItems = [...(prev.items || []), newItem]
+          }
+          const newSubtotal = updatedItems
+            .reduce((acc, it) => acc + Number(it.unit_price) * it.quantity, 0)
+            .toFixed(2)
+          return { ...prev, items: updatedItems, subtotal: newSubtotal }
+        })
+
+        // Background sync
         await orderApi.addItem(order.id, { variant: variant.id, quantity: 1 })
         await refreshOrder()
       }
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to add item.'))
+      await refreshOrder()
     } finally {
       setBusyVariant(null)
     }
@@ -260,6 +297,29 @@ export default function POS() {
 
   const changeQuantity = async (line, quantity) => {
     setBusyItemId(line.id)
+    // Instant Optimistic UI Update
+    setOrder((prev) => {
+      if (!prev) return prev
+      let updatedItems
+      if (quantity < 1) {
+        updatedItems = (prev.items || []).filter((it) => it.id !== line.id)
+      } else {
+        updatedItems = (prev.items || []).map((it) =>
+          it.id === line.id
+            ? {
+                ...it,
+                quantity,
+                line_total: (quantity * Number(it.unit_price)).toFixed(2),
+              }
+            : it
+        )
+      }
+      const newSubtotal = updatedItems
+        .reduce((acc, it) => acc + Number(it.unit_price) * it.quantity, 0)
+        .toFixed(2)
+      return { ...prev, items: updatedItems, subtotal: newSubtotal }
+    })
+
     try {
       if (order?.is_offline || String(order?.id).startsWith('off_')) {
         let updatedItems
@@ -281,7 +341,6 @@ export default function POS() {
           .toFixed(2)
         const updatedOrder = { ...order, items: updatedItems, subtotal: newSubtotal }
         await saveOfflineRunningOrder(updatedOrder)
-        setOrder(updatedOrder)
       } else {
         if (quantity < 1) {
           await orderApi.removeItem(order.id, line.id)
@@ -292,6 +351,7 @@ export default function POS() {
       }
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to update quantity.'))
+      await refreshOrder()
     } finally {
       setBusyItemId(null)
     }
@@ -299,6 +359,16 @@ export default function POS() {
 
   const removeItem = async (line) => {
     setBusyItemId(line.id)
+    // Instant optimistic update
+    setOrder((prev) => {
+      if (!prev) return prev
+      const updatedItems = (prev.items || []).filter((it) => it.id !== line.id)
+      const newSubtotal = updatedItems
+        .reduce((acc, it) => acc + Number(it.unit_price) * it.quantity, 0)
+        .toFixed(2)
+      return { ...prev, items: updatedItems, subtotal: newSubtotal }
+    })
+
     try {
       if (order?.is_offline || String(order?.id).startsWith('off_')) {
         const updatedItems = (order.items || []).filter((it) => it.id !== line.id)
@@ -307,13 +377,13 @@ export default function POS() {
           .toFixed(2)
         const updatedOrder = { ...order, items: updatedItems, subtotal: newSubtotal }
         await saveOfflineRunningOrder(updatedOrder)
-        setOrder(updatedOrder)
       } else {
         await orderApi.removeItem(order.id, line.id)
         await refreshOrder()
       }
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to remove item.'))
+      await refreshOrder()
     } finally {
       setBusyItemId(null)
     }
@@ -486,7 +556,7 @@ export default function POS() {
   if (loading) return <PageLoader label="Loading Lumière POS Terminal…" />
   if (!tableId && !orderIdParam && !order) {
     return (
-      <div className="flex flex-1 min-h-0 flex-col bg-[#fafaf9] p-4 sm:p-6 overflow-y-auto">
+      <div className="flex flex-1 min-h-0 flex-col bg-[#f9f9f8] p-4 sm:p-6 overflow-y-auto">
         <POSStartScreen
           key={launcherRefreshKey}
           onPickTable={(id) => setParams({ table: String(id) })}
@@ -544,116 +614,70 @@ export default function POS() {
   }
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col bg-[#fafaf9]">
-      {/* Active POS Header Bar */}
-      <header className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 shadow-xs">
-        <div className="flex items-center gap-3">
-          <Link
-            to="/tables"
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 active:scale-95"
-          >
-            ← Floor Map
-          </Link>
+    <div className="flex flex-1 h-full min-h-0 flex-col bg-[#f9f9f8] text-slate-800 font-sans antialiased select-none relative overflow-hidden p-3 md:p-4">
+      <div className="max-w-[1536px] w-full mx-auto flex flex-1 min-h-0 flex-col gap-3 h-full overflow-hidden">
+        {/* Top Header */}
+        <header className="shrink-0 flex items-center justify-between px-2 pt-1 pb-1" data-purpose="header-section">
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-800">
+              {order?.order_type === 'TAKEAWAY'
+                ? (order.tag_name ? `Parcel (${order.tag_name})` : `Takeaway #TK-${order.id}`)
+                : `Table ${order?.table_number ?? ''}`}
+            </h1>
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 tracking-wide uppercase">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block animate-pulse"></span>
+              {order?.status_display || 'Running'}
+            </span>
+            <span className="text-sm font-semibold text-slate-400 pl-1 hidden sm:inline">
+              {order?.order_type === 'TAKEAWAY' ? 'Parcel Counter' : 'Main Dining Hall'}
+            </span>
+          </div>
+
+          {/* Action Button */}
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <IconPos className="size-5 text-rose-600" />
-                {order?.order_type === 'TAKEAWAY' ? `Takeaway Parcel (#TK-${order.id})` : `Table ${order?.table_number ?? ''}`}
-              </h1>
-              {order?.order_type === 'TAKEAWAY' && (
-                <span className="bg-rose-100 text-rose-800 font-black text-[10px] uppercase px-2 py-0.5 rounded-md border border-rose-200">
-                  Parcel Counter
-                </span>
-              )}
-            </div>
-            <p className="text-xs font-semibold text-slate-400">
-              Order #{order?.id} · {order?.item_count ?? 0} items in cart
-            </p>
-          </div>
-          <Badge tone={order?.status === 'RUNNING' ? 'red' : 'amber'}>{order?.status_display}</Badge>
-
-          {activeTakeawaysList.length > 0 && (
             <button
-              onClick={() => setShowTakeawaysModal(true)}
-              className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-800 shadow-2xs hover:bg-rose-100 transition active:scale-95"
+              type="button"
+              onClick={() => setVoidingOrder(order)}
+              disabled={!order || order.status !== 'RUNNING'}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-rose-600 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold transition duration-150 shadow-sm cursor-pointer disabled:opacity-50"
+              id="voidOrderBtn"
             >
-              <IconPos className="size-4 text-rose-600" />
-              <span>{activeTakeawaysList.length} Active Parcels</span>
+              <i className="fa-regular fa-trash-can text-sm text-white"></i>
+              Cancel Order
             </button>
-          )}
-        </div>
+          </div>
+        </header>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setPickingCustomer(true)}
-            disabled={order?.status !== 'RUNNING'}
-            className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition disabled:opacity-50 active:scale-95 ${
-              order?.customer_detail
-                ? 'border-emerald-300 bg-emerald-50 text-emerald-900 shadow-xs'
-                : 'border-dashed border-slate-300 text-slate-600 hover:border-rose-300 hover:text-rose-600 bg-white'
-            }`}
-          >
-            <span>👤</span>
-            {order?.customer_detail ? (
-              <span>
-                {order.customer_detail.name}
-                <span className="ml-1.5 text-[11px] font-extrabold text-emerald-700">
-                  ({order.customer_detail.points_balance} pts)
-                </span>
-              </span>
-            ) : (
-              '+ Attach Customer'
-            )}
-          </button>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-12 gap-4 flex-1 min-h-0 h-full overflow-hidden">
+          {/* Left Menu Section (col-span-12 lg:col-span-8) */}
+          <section className="col-span-12 lg:col-span-8 flex flex-col gap-3 h-full min-h-0 overflow-hidden" data-purpose="menu-catalog">
+            <MenuGrid
+              items={menu.items}
+              categories={menu.categories}
+              busyVariant={busyVariant}
+              disabled={order?.status !== 'RUNNING'}
+              onAdd={addItem}
+            />
+          </section>
 
-          <button
-            onClick={() => setVoidingOrder(order)}
-            disabled={!order || order.status !== 'RUNNING'}
-            className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-40 active:scale-95 shadow-2xs"
-            title="Cancel / Void this order"
-          >
-            <svg className="size-4 text-rose-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            <span>Void Order</span>
-          </button>
-
-          <div className="text-right">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Running Total</span>
-            <span className="tabular text-base font-black text-slate-900">{money(order?.subtotal ?? 0)}</span>
+          {/* Right Billing Sidebar (col-span-12 lg:col-span-4) */}
+          <div className="col-span-12 lg:col-span-4 h-full min-h-0 flex flex-col overflow-hidden">
+            <CartPanel
+              order={order}
+              totals={totals}
+              busyItemId={busyItemId}
+              onQuantity={changeQuantity}
+              onRemove={removeItem}
+              onSendKot={sendKot}
+              onGenerateBill={onGenerateBill}
+              onPayBill={() => initiatePayOrder(order)}
+              onAddCustomItem={() => setCustomItemModalOpen(true)}
+              sendingKot={sendingKot}
+              generating={generating}
+            />
           </div>
         </div>
-      </header>
-
-      {/* POS Billing Canvas */}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
-        {/* Left: Menu Browser */}
-        <section className="min-h-0 min-w-0 flex-1 p-3 sm:p-4 lg:p-5 overflow-y-auto">
-          <MenuGrid
-            items={menu.items}
-            categories={menu.categories}
-            busyVariant={busyVariant}
-            disabled={order?.status !== 'RUNNING'}
-            onAdd={addItem}
-          />
-        </section>
-
-        {/* Right: Glassmorphism Order Cart */}
-        <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-slate-200/80 bg-white p-4 sm:p-5 lg:w-80 xl:w-96 lg:border-t-0 lg:border-l shadow-xs">
-          <CartPanel
-            order={order}
-            totals={totals}
-            busyItemId={busyItemId}
-            onQuantity={changeQuantity}
-            onRemove={removeItem}
-            onSendKot={sendKot}
-            onGenerateBill={onGenerateBill}
-            onPayBill={() => initiatePayOrder(order)}
-            onAddCustomItem={() => setCustomItemModalOpen(true)}
-            sendingKot={sendingKot}
-            generating={generating}
-          />
-        </aside>
       </div>
 
 
