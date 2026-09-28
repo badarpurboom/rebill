@@ -22,6 +22,7 @@ const NAV_META = {
   '/whatsapp': { label: 'WhatsApp Console', shortcut: null, tag: 'Chat' },
   '/coupons': { label: 'Coupons & Promos', shortcut: null, tag: 'Offers' },
   '/reports': { label: 'Analytics & Reports', shortcut: null, tag: 'Live', isLive: true },
+  '/explore': { label: 'Explore Hub', shortcut: '⌘E', tag: 'Hub' },
   '/settings': { label: 'Settings & Staff', shortcut: '⌘,', tag: 'Admin', isSpin: true },
 }
 
@@ -54,6 +55,9 @@ export default function Layout() {
     .slice(0, 2)
     .toUpperCase()
 
+  const topLinks = links.filter((l) => l.to !== '/explore' && l.to !== '/settings')
+  const bottomNavLinks = links.filter((l) => l.to === '/explore' || l.to === '/settings')
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#f9f9f8] text-slate-800 selection:bg-rose-100 selection:text-rose-900">
       {/* Mobile Backdrop */}
@@ -70,11 +74,11 @@ export default function Layout() {
         {/* Main Liquid Glass Pill Navigation Strip */}
         <nav
           onMouseMove={handleMouseMove}
-          className="relative w-[64px] rounded-[32px] flex flex-col items-center justify-between py-3 px-1 glass-pill-container backdrop-blur-2xl z-20 overflow-visible shadow-xl"
+          className="relative w-[64px] h-[calc(100vh-24px)] rounded-[32px] flex flex-col items-center justify-between py-3 px-1 glass-pill-container backdrop-blur-2xl z-20 overflow-visible shadow-xl"
           data-purpose="vertical-navigation-strip"
         >
-          {/* Top Master Logo / Brand Badge */}
-          <div className="flex flex-col items-center w-full shrink-0">
+          {/* Top Master Logo / Brand Badge + Operational Links */}
+          <div className="flex flex-col items-center w-full shrink-0 space-y-1.5">
             <NavLink
               to="/"
               aria-label="ReBill POS Home"
@@ -94,12 +98,10 @@ export default function Layout() {
             </NavLink>
 
             {/* Micro divider under logo */}
-            <div className="w-6 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent mt-2 mb-1" />
-          </div>
+            <div className="w-6 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent my-1" />
 
-          {/* Main Navigation Items (Compact No-Scroll) */}
-          <div className="flex flex-col items-center space-y-1.5 w-full py-0.5 px-0.5">
-            {links.map((link) => {
+            {/* Core Operational Links (Dashboard, POS, Tables, KOT) */}
+            {topLinks.map((link) => {
               const meta = NAV_META[link.to] || { label: link.label, shortcut: null, tag: null }
               const isSpin = meta.isSpin
               const isLive = meta.isLive
@@ -124,15 +126,10 @@ export default function Layout() {
                   >
                     {({ isActive }) => (
                       <>
-                        {/* Active Notch */}
                         {isActive && <div className="active-notch" />}
-
-                        {/* Nav Icon */}
                         <span className="w-4.5 h-4.5 flex items-center justify-center [&>svg]:size-[18px]">
                           {link.icon}
                         </span>
-
-                        {/* Live pulsating dot if applicable */}
                         {isLive && !isActive && (
                           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06B6D4]" />
                         )}
@@ -140,7 +137,6 @@ export default function Layout() {
                     )}
                   </NavLink>
 
-                  {/* Liquid Glass Spring Tooltip */}
                   <div className="nav-tooltip absolute left-[74px] top-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl whitespace-nowrap">
                     <span className="text-white text-xs font-medium">{meta.label}</span>
                     {meta.shortcut && (
@@ -160,10 +156,67 @@ export default function Layout() {
             })}
           </div>
 
-          {/* Bottom Utility Group (Logout only) */}
-          <div className="flex flex-col items-center space-y-1.5 w-full shrink-0 pt-0.5">
+          {/* Empty Spacer Area in Menubar (Reserves vertical space of removed modules) */}
+          <div className="flex-1 w-full min-h-16 pointer-events-none" aria-hidden="true" />
+
+          {/* Bottom Group (Explore, Settings, Logout) */}
+          <div className="flex flex-col items-center space-y-1.5 w-full shrink-0 pb-0.5">
+            {bottomNavLinks.map((link) => {
+              const meta = NAV_META[link.to] || { label: link.label, shortcut: null, tag: null }
+              const isSpin = meta.isSpin
+              const isLive = meta.isLive
+
+              return (
+                <div
+                  key={link.to}
+                  className={`relative w-full flex justify-center nav-item group ${isSpin ? 'spin-on-hover' : ''}`}
+                  data-nav={link.to}
+                >
+                  <NavLink
+                    to={link.to}
+                    end={link.to === '/'}
+                    aria-label={meta.label}
+                    className={({ isActive }) =>
+                      `nav-btn relative flex items-center justify-center focus:outline-none cursor-pointer transition-all duration-300 ${
+                        isActive
+                          ? 'is-active w-9.5 h-9.5 rounded-[13px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] text-white glow-red'
+                          : 'w-9 h-9 rounded-[12px] text-slate-400 hover:text-white'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && <div className="active-notch" />}
+                        <span className="w-4.5 h-4.5 flex items-center justify-center [&>svg]:size-[18px]">
+                          {link.icon}
+                        </span>
+                        {isLive && !isActive && (
+                          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06B6D4]" />
+                        )}
+                      </>
+                    )}
+                  </NavLink>
+
+                  <div className="nav-tooltip absolute left-[74px] top-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl whitespace-nowrap">
+                    <span className="text-white text-xs font-medium">{meta.label}</span>
+                    {meta.shortcut && (
+                      <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-slate-300">
+                        {meta.shortcut}
+                      </kbd>
+                    )}
+                    {meta.tag && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
+                        {meta.tag}
+                      </span>
+                    )}
+                    <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-[#0e101a] rotate-45 border-l border-b border-white/10" />
+                  </div>
+                </div>
+              )
+            })}
+
             {/* Minimalist Fading Separator */}
-            <div className="w-6 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent my-0.5" />
+            <div className="w-6 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent my-1" />
 
             {/* Logout / Clock Out Action */}
             <div className="relative w-full flex justify-center nav-item group" data-nav="logout">
@@ -185,7 +238,6 @@ export default function Layout() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v10" />
                 </svg>
               </button>
-              {/* Logout Tooltip */}
               <div className="nav-tooltip absolute left-[74px] top-1/2 flex items-center gap-2 px-3 py-1.5 rounded-xl whitespace-nowrap">
                 <span className="text-rose-300 text-xs font-medium">Logout / Clock Out</span>
                 <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-[#0e101a] rotate-45 border-l border-b border-white/10" />
@@ -205,17 +257,14 @@ export default function Layout() {
           onMouseMove={handleMouseMove}
           className="relative w-[78px] h-full max-h-[780px] rounded-[40px] flex flex-col items-center justify-between py-4.5 glass-pill-container backdrop-blur-2xl z-20"
         >
-          {/* Top Logo */}
-          <div className="flex flex-col items-center w-full shrink-0">
+          {/* Top Logo + Operational Links */}
+          <div className="flex flex-col items-center w-full shrink-0 space-y-2">
             <div className="w-12 h-12 rounded-[18px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] flex items-center justify-center text-white glow-red">
               <IconChefHat className="w-6 h-6 stroke-[1.8]" />
             </div>
-            <div className="w-7 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent mt-3 mb-1" />
-          </div>
+            <div className="w-7 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent my-1" />
 
-          {/* Links */}
-          <div className="scroll-thin flex flex-col items-center space-y-2.5 w-full overflow-y-auto py-1 px-1">
-            {links.map((link) => (
+            {topLinks.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
@@ -224,8 +273,8 @@ export default function Layout() {
                 className={({ isActive }) =>
                   `nav-btn relative flex items-center justify-center transition-all duration-300 ${
                     isActive
-                      ? 'is-active w-12 h-12 rounded-[18px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] text-white glow-red'
-                      : 'w-11 h-11 rounded-[16px] text-slate-400 hover:text-white'
+                      ? 'is-active w-11 h-11 rounded-[16px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] text-white glow-red'
+                      : 'w-10 h-10 rounded-[14px] text-slate-400 hover:text-white'
                   }`
                 }
               >
@@ -239,14 +288,42 @@ export default function Layout() {
             ))}
           </div>
 
-          {/* Bottom Logout */}
-          <div className="flex flex-col items-center space-y-2.5 w-full shrink-0">
+          {/* Empty Space in Mobile Menu */}
+          <div className="flex-1 w-full" aria-hidden="true" />
+
+          {/* Bottom Explore + Settings + Logout */}
+          <div className="flex flex-col items-center space-y-2 w-full shrink-0">
+            {bottomNavLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.to === '/'}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  `nav-btn relative flex items-center justify-center transition-all duration-300 ${
+                    isActive
+                      ? 'is-active w-11 h-11 rounded-[16px] bg-gradient-to-b from-[#FF5436] to-[#E8143A] text-white glow-red'
+                      : 'w-10 h-10 rounded-[14px] text-slate-400 hover:text-white'
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && <div className="active-notch" />}
+                    <span className="size-5 flex items-center justify-center">{link.icon}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+
+            <div className="w-7 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent my-1" />
+
             <button
               onClick={() => {
                 setOpen(false)
                 handleLogout()
               }}
-              className="w-11 h-11 rounded-[16px] flex items-center justify-center text-slate-400 hover:text-rose-400"
+              className="w-10 h-10 rounded-[14px] flex items-center justify-center text-slate-400 hover:text-rose-400"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.36 6.64A9 9 0 1 1 5.64 6.64" />

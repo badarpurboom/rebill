@@ -8,6 +8,8 @@ import {
   IconWhatsApp,
   IconReceipt,
   IconSparkles,
+  IconCompass,
+  IconSettings,
 } from '@/components/ui/Icons'
 
 /**
@@ -19,13 +21,8 @@ export const NAV = [
   { to: '/pos', label: 'Billing POS', icon: <IconPos />, permission: 'view_pos' },
   { to: '/tables', label: 'Floor Map', icon: <IconTables />, permission: 'view_floor_map' },
   { to: '/kot', label: 'KOT Display', icon: <IconChefHat />, permission: 'view_kot' },
-  { to: '/menu', label: 'Menu Catalog', icon: <IconMenu />, permission: 'view_menu' },
-  { to: '/customers', label: 'Customers', icon: <IconSparkles />, permission: 'view_customers' },
-  { to: '/orders', label: 'Order History', icon: <IconOrders />, permission: 'view_orders' },
-  { to: '/whatsapp', label: 'WhatsApp', icon: <IconWhatsApp />, permission: 'view_whatsapp' },
-  { to: '/coupons', label: 'Coupons', icon: <IconReceipt />, permission: 'view_coupons' },
-  { to: '/reports', label: 'Reports', icon: <IconDashboard />, permission: 'view_reports' },
-  { to: '/settings', label: 'Settings', icon: <IconSparkles />, permission: 'view_settings' },
+  { to: '/explore', label: 'Explore', icon: <IconCompass />, permission: 'view_explore' },
+  { to: '/settings', label: 'Settings', icon: <IconSettings />, permission: 'view_settings' },
 ]
 
 export const PERMISSION_MODULES = [
@@ -217,6 +214,7 @@ export const ROLE_PRESETS = [
 
 export function hasPermission(user, permission) {
   if (!user) return false
+  if (!permission || permission === 'view_explore') return true
   if (user.is_superuser) return true
   if (user.is_owner) return true
 
@@ -231,13 +229,14 @@ export function hasPermission(user, permission) {
     return [
       'view_dashboard', 'view_pos', 'view_floor_map', 'view_kot',
       'view_menu', 'view_customers', 'view_orders', 'punch_order',
-      'print_kot', 'print_bill', 'settle_bill', 'cancel_bill', 'apply_discount'
+      'print_kot', 'print_bill', 'settle_bill', 'cancel_bill', 'apply_discount',
+      'view_explore', 'view_coupons', 'view_whatsapp', 'view_reports'
     ].includes(permission)
   }
   if (user.role === 'WAITER') {
     return [
       'view_dashboard', 'view_pos', 'view_floor_map', 'view_kot',
-      'punch_order', 'print_kot', 'print_bill', 'view_menu'
+      'punch_order', 'print_kot', 'print_bill', 'view_menu', 'view_explore'
     ].includes(permission)
   }
   return false
