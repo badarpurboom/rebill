@@ -4,6 +4,7 @@ import { ToastProvider } from '@/context/ToastContext'
 import { SyncProvider } from '@/context/SyncContext'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import AnnotationOverlay from '@/components/annotation/AnnotationOverlay'
 import ComingSoon from '@/pages/ComingSoon'
 import Customers from '@/pages/Customers'
 import Dashboard from '@/pages/Dashboard'
@@ -53,6 +54,7 @@ export default function App() {
 
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <AnnotationOverlay />
         </AuthProvider>
         </SyncProvider>
       </ToastProvider>
