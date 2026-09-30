@@ -44,6 +44,21 @@ export default function MenuManagement() {
   const [inlinePriceEdit, setInlinePriceEdit] = useState(null) // { itemId, portion, value }
 
   const searchRef = useRef(null)
+  const catSliderRef = useRef(null)
+  const stockMenuRef = useRef(null)
+  const sortMenuRef = useRef(null)
+
+  const [stockMenuOpen, setStockMenuOpen] = useState(false)
+  const [sortMenuOpen, setSortMenuOpen] = useState(false)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(true)
+
+  const checkScroll = useCallback(() => {
+    const el = catSliderRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 10)
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 10)
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +87,39 @@ export default function MenuManagement() {
     window.addEventListener('keydown', fn)
     return () => window.removeEventListener('keydown', fn)
   }, [])
+
+  // Check category slider scrollability
+  useEffect(() => {
+    const el = catSliderRef.current
+    if (!el) return
+    checkScroll()
+    el.addEventListener('scroll', checkScroll)
+    window.addEventListener('resize', checkScroll)
+    return () => {
+      el.removeEventListener('scroll', checkScroll)
+      window.removeEventListener('resize', checkScroll)
+    }
+  }, [checkScroll, cats.length])
+
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (stockMenuRef.current && !stockMenuRef.current.contains(e.target)) {
+        setStockMenuOpen(false)
+      }
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target)) {
+        setSortMenuOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', handleOutsideClick)
+    return () => window.removeEventListener('mousedown', handleOutsideClick)
+  }, [])
+
+  const scrollSlider = (direction) => {
+    if (!catSliderRef.current) return
+    const offset = direction === 'left' ? -280 : 280
+    catSliderRef.current.scrollBy({ left: offset, behavior: 'smooth' })
+  }
 
   // KPI Calculations
   const stats = useMemo(() => {
@@ -363,141 +411,202 @@ export default function MenuManagement() {
   const allFilteredSelected = filteredItems.length > 0 && filteredItems.every((it) => selectedIds.has(it.id))
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5 pb-24">
-      {/* ── 1. Top Header & Stats Hub ── */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          {/* Title & Stats */}
-          <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span>🍽️</span> Menu Catalog
-              </h1>
-              <span className="rounded-full bg-slate-900 text-white px-3 py-0.5 text-xs font-black">
-                {stats.totalItems} Dishes
-              </span>
-              <span className="rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-0.5 text-xs font-black">
-                {stats.vegCount} Veg
-              </span>
-              <span className="rounded-full bg-rose-50 border border-rose-200 text-rose-700 px-2.5 py-0.5 text-xs font-black">
-                {stats.nonVegCount} Non-Veg
-              </span>
-              {stats.outOfStockCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setStockFilter(stockFilter === 'OUT_OF_STOCK' ? 'ALL' : 'OUT_OF_STOCK')}
-                  className="rounded-full bg-amber-50 border border-amber-300 text-amber-800 px-2.5 py-0.5 text-xs font-black hover:bg-amber-100 transition-colors animate-pulse"
-                >
-                  ⚠️ {stats.outOfStockCount} Out of Stock
-                </button>
-              )}
-            </div>
-            <p className="mt-1.5 text-xs font-bold text-slate-400">
-              {stats.activeCategories} Active Categories · Multi-Portion Variants · Instant 86-ing Stock Management
-            </p>
+    <div className="w-full space-y-4 pb-20">
+      {/* ── 1. Top Compact Header & Action Strip ── */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur-md px-5 py-3.5 shadow-xs transition-all">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Title & Warning Stats */}
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <span className="text-xl">🍽️</span> Menu Catalog
+            </h1>
+            {stats.outOfStockCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setStockFilter(stockFilter === 'OUT_OF_STOCK' ? 'ALL' : 'OUT_OF_STOCK')}
+                className="rounded-full bg-amber-50 border border-amber-300 text-amber-800 px-2.5 py-0.5 text-xs font-black hover:bg-amber-100 transition-colors animate-pulse"
+              >
+                ⚠️ {stats.outOfStockCount} Out of Stock
+              </button>
+            )}
           </div>
 
-          {/* Action Toolbar */}
+          {/* Action Toolbar with Sleek Modern UI */}
           {isOwner && (
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setShowCategoryManager(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-2xs"
-              >
-                🗂️ Categories
-              </button>
+              {/* Refined Segmented Action Bar */}
+              <div className="flex items-center gap-0.5 bg-slate-100 p-1 rounded-xl border border-slate-200/90 shadow-2xs">
+                {/* 1. Categories Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryManager(true)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-2xs active:scale-95 transition-all duration-150 cursor-pointer"
+                >
+                  <svg className="size-3.5 text-slate-500 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                  </svg>
+                  <span>Categories</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setShowImportModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-2xs"
-              >
-                📤 Import CSV/Excel
-              </button>
+                {/* Vertical subtle divider */}
+                <div className="w-[1px] h-3.5 bg-slate-200 mx-0.5" />
 
-              <button
-                type="button"
-                onClick={() => itemApi.exportFile()}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-2xs"
-              >
-                📥 Export Menu
-              </button>
+                {/* 2. Import Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(true)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-2xs active:scale-95 transition-all duration-150 cursor-pointer"
+                >
+                  <svg className="size-3.5 text-slate-500 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <span>Import</span>
+                </button>
 
+                {/* Vertical subtle divider */}
+                <div className="w-[1px] h-3.5 bg-slate-200 mx-0.5" />
+
+                {/* 3. Export Button */}
+                <button
+                  type="button"
+                  onClick={() => itemApi.exportFile()}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-2xs active:scale-95 transition-all duration-150 cursor-pointer"
+                >
+                  <svg className="size-3.5 text-slate-500 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  <span>Export</span>
+                </button>
+              </div>
+
+              {/* Primary + New Dish Button */}
               <button
                 type="button"
                 onClick={() => setEditingItem({})}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white shadow-md shadow-rose-600/20 hover:bg-rose-700 transition-all"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:from-rose-500 hover:to-rose-600 hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
               >
-                + New Dish
+                <svg className="size-3.5 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span>New Dish</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── 2. Category Pill Slider / Strip ── */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scroll-smooth no-scrollbar">
-        <button
-          type="button"
-          onClick={() => setSelectedCategory('ALL')}
-          className={`px-4 py-2 rounded-2xl text-xs font-black whitespace-nowrap transition-all shrink-0 ${
-            selectedCategory === 'ALL'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          All Categories ({rows.length})
-        </button>
-
-        {cats.map((cat) => {
-          const isSelected = String(selectedCategory) === String(cat.id)
-          const catItemCount = rows.filter((r) => String(r.category) === String(cat.id)).length
-          return (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setSelectedCategory(isSelected ? 'ALL' : String(cat.id))}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all shrink-0 border ${
-                isSelected
-                  ? 'border-rose-600 bg-rose-50 text-rose-700 shadow-xs font-black'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              } ${!cat.is_active ? 'opacity-60 border-dashed' : ''}`}
-            >
-              <span>{cat.name}</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                isSelected ? 'bg-rose-200 text-rose-800' : 'bg-slate-100 text-slate-500'
-              }`}>
-                {catItemCount}
-              </span>
-              {!cat.is_active && (
-                <span className="size-1.5 rounded-full bg-amber-500" title="Disabled in POS" />
-              )}
-            </button>
-          )
-        })}
-
-        {isOwner && (
+      {/* ── 2. Category Pill Slider / Strip with Crimson Red Theme & Smooth Controls ── */}
+      <div className="relative group w-full flex items-center py-1">
+        {/* Left Scroll Navigation Arrow */}
+        {canScrollLeft && (
           <button
             type="button"
-            onClick={() => setShowCategoryManager(true)}
-            className="px-3 py-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 text-slate-500 hover:border-slate-400 hover:text-slate-800 text-xs font-bold whitespace-nowrap transition-all shrink-0 flex items-center gap-1"
+            onClick={() => scrollSlider('left')}
+            className="absolute left-0 z-20 flex size-8 items-center justify-center rounded-full bg-white/95 text-slate-700 shadow-md border border-slate-200/90 hover:bg-rose-50 hover:text-rose-600 hover:scale-110 active:scale-95 transition-all cursor-pointer backdrop-blur-xs -translate-x-1"
+            aria-label="Scroll categories left"
           >
-            <span>+</span> Manage Categories
+            <svg className="size-4 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+        )}
+
+        {/* Category Scroll Container */}
+        <div
+          ref={catSliderRef}
+          className="flex items-center gap-2 overflow-x-auto pb-1 scroll-smooth no-scrollbar w-full px-1"
+        >
+          {/* All Categories Pill */}
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('ALL')}
+            className={`group relative flex items-center gap-2 px-4 py-2 rounded-2xl text-xs whitespace-nowrap transition-all duration-200 shrink-0 cursor-pointer select-none ${
+              selectedCategory === 'ALL'
+                ? 'bg-gradient-to-r from-[#FF453A] via-[#E11D48] to-[#C81E46] text-white shadow-md shadow-rose-500/30 font-black ring-2 ring-rose-400/50 scale-[1.02]'
+                : 'bg-white/95 border border-slate-200/90 text-slate-700 hover:text-slate-950 hover:border-rose-300 hover:shadow-xs font-bold active:scale-95'
+            }`}
+          >
+            <span>All Categories</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black font-mono transition-colors ${
+                selectedCategory === 'ALL'
+                  ? 'bg-white/25 text-white ring-1 ring-white/30'
+                  : 'bg-slate-100 text-slate-600 group-hover:bg-rose-50 group-hover:text-rose-700'
+              }`}
+            >
+              {rows.length}
+            </span>
+          </button>
+
+          {/* Individual Category Pills */}
+          {cats.map((cat) => {
+            const isSelected = String(selectedCategory) === String(cat.id)
+            const catItemCount = rows.filter((r) => String(r.category) === String(cat.id)).length
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(isSelected ? 'ALL' : String(cat.id))}
+                className={`group relative flex items-center gap-2 px-4 py-2 rounded-2xl text-xs whitespace-nowrap transition-all duration-200 shrink-0 cursor-pointer select-none ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-[#FF453A] via-[#E11D48] to-[#C81E46] text-white shadow-md shadow-rose-500/30 font-black ring-2 ring-rose-400/50 scale-[1.02]'
+                    : 'bg-white/95 border border-slate-200/90 text-slate-700 hover:text-slate-950 hover:border-rose-300 hover:shadow-xs font-bold active:scale-95'
+                } ${!cat.is_active ? 'opacity-60 border-dashed' : ''}`}
+              >
+                <span>{cat.name}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black font-mono transition-colors ${
+                    isSelected
+                      ? 'bg-white/25 text-white ring-1 ring-white/30'
+                      : 'bg-slate-100 text-slate-600 group-hover:bg-rose-50 group-hover:text-rose-700'
+                  }`}
+                >
+                  {catItemCount}
+                </span>
+                {!cat.is_active && (
+                  <span className="size-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]" title="Disabled in POS" />
+                )}
+              </button>
+            )
+          })}
+
+          {/* Manage Categories Action */}
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setShowCategoryManager(true)}
+              className="px-3.5 py-2 rounded-2xl border border-dashed border-slate-300/90 bg-slate-50/80 text-slate-600 hover:border-rose-400 hover:text-rose-600 hover:bg-rose-50/40 text-xs font-bold whitespace-nowrap transition-all duration-200 shrink-0 flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <span className="text-sm font-bold text-rose-500">+</span> Manage Categories
+            </button>
+          )}
+        </div>
+
+        {/* Right Scroll Navigation Arrow */}
+        {canScrollRight && (
+          <button
+            type="button"
+            onClick={() => scrollSlider('right')}
+            className="absolute right-0 z-20 flex size-8 items-center justify-center rounded-full bg-white/95 text-slate-700 shadow-md border border-slate-200/90 hover:bg-rose-50 hover:text-rose-600 hover:scale-110 active:scale-95 transition-all cursor-pointer backdrop-blur-xs translate-x-1"
+            aria-label="Scroll categories right"
+          >
+            <svg className="size-4 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
           </button>
         )}
       </div>
 
-      {/* ── 3. Filters, Sorting & View Switcher ── */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-xs">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+      {/* ── 3. Filters, Sorting & View Switcher (Clean Modern Toolbar) ── */}
+      <div className="relative z-30 rounded-2xl border border-slate-200/80 bg-white p-2.5 sm:p-3 shadow-xs">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
           {/* Search bar */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-[240px]">
             <svg
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2.2"
+              strokeWidth="2"
               viewBox="0 0 24 24"
             >
               <circle cx="11" cy="11" r="8" />
@@ -508,134 +617,352 @@ export default function MenuManagement() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search dishes by name, category, or description... (Press / to search)"
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all"
+              placeholder="Search dishes by name, category, or ingredients... (Press / to focus)"
+              className="w-full rounded-xl border border-slate-200/90 bg-slate-50/80 py-2 pl-9 pr-8 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:bg-white focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all"
             />
             {search ? (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 size-6 flex items-center justify-center text-sm font-bold"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 size-5 flex items-center justify-center text-xs font-bold rounded hover:bg-slate-200/60 cursor-pointer"
               >
                 ✕
               </button>
             ) : (
-              <span className="hidden sm:block absolute right-3.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded border border-slate-200 bg-white text-[10px] font-black text-slate-400">
+              <span className="hidden sm:block absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.2 rounded border border-slate-200 bg-white text-[10px] font-mono font-bold text-slate-400">
                 /
               </span>
             )}
           </div>
 
-          {/* Filter Pills */}
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            {/* Food Type Pill Toggle */}
-            <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 shrink-0">
+          {/* Filter Controls Strip */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+            {/* Food Type Segmented Slider with Pixel-Perfect Glider */}
+            <div className="relative grid grid-cols-3 w-64 bg-slate-100 p-1 rounded-xl border border-slate-200/90 shadow-inner select-none">
+              {/* Red Sliding Background Glider */}
+              <div
+                className="absolute top-1 bottom-1 rounded-lg bg-gradient-to-r from-[#FF453A] via-[#E11D48] to-[#C81E46] shadow-md shadow-rose-500/30 transition-transform duration-300 ease-[cubic-bezier(0.2,0.85,0.32,1.2)] pointer-events-none"
+                style={{
+                  width: 'calc((100% - 8px) / 3)',
+                  left: '4px',
+                  transform: `translateX(${foodType === 'ALL' ? '0%' : foodType === 'VEG' ? '100%' : '200%'})`,
+                }}
+              />
+
               {[
                 { value: 'ALL', label: 'All' },
-                { value: 'VEG', label: '🟢 Veg' },
-                { value: 'NON_VEG', label: '🔴 Non-Veg' },
+                { value: 'VEG', label: 'Veg', dot: 'bg-emerald-500 ring-emerald-200' },
+                { value: 'NON_VEG', label: 'Non-Veg', dot: 'bg-rose-500 ring-rose-200' },
               ].map((f) => (
                 <button
                   key={f.value}
                   type="button"
                   onClick={() => setFoodType(f.value)}
-                  className={`rounded-xl px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition-all ${
+                  className={`relative z-10 py-1.5 px-2 text-xs transition-colors duration-200 cursor-pointer text-center flex items-center justify-center gap-1.5 select-none ${
                     foodType === f.value
-                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80 font-black'
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'text-white font-black'
+                      : 'text-slate-600 hover:text-slate-900 font-bold'
                   }`}
                 >
-                  {f.label}
+                  {f.dot && (
+                    <span
+                      className={`size-2 rounded-full ring-2 transition-all ${
+                        foodType === f.value ? 'bg-white ring-white/50 shadow-xs' : f.dot
+                      }`}
+                    />
+                  )}
+                  <span>{f.label}</span>
                 </button>
               ))}
             </div>
 
-            {/* Stock Filter */}
-            <select
-              value={stockFilter}
-              onChange={(e) => setStockFilter(e.target.value)}
-              className="rounded-2xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs font-bold text-slate-700 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all shrink-0 cursor-pointer"
-            >
-              <option value="ALL">All Stock</option>
-              <option value="IN_STOCK">✅ In Stock</option>
-              <option value="OUT_OF_STOCK">⛔ Out of Stock (86'd)</option>
-            </select>
+            {/* Custom Modern Stock Filter Dropdown */}
+            <div ref={stockMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setStockMenuOpen((prev) => !prev)
+                  setSortMenuOpen(false)
+                }}
+                className={`group flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all duration-200 cursor-pointer select-none ${
+                  stockMenuOpen
+                    ? 'border-rose-500 bg-rose-50 text-rose-900 ring-2 ring-rose-200/80 shadow-sm font-black'
+                    : stockFilter !== 'ALL'
+                    ? stockFilter === 'IN_STOCK'
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-950 font-black shadow-xs'
+                      : 'border-rose-300 bg-rose-50 text-rose-950 font-black shadow-xs'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 shadow-2xs'
+                }`}
+              >
+                {/* Status dot indicator */}
+                {stockFilter === 'ALL' ? (
+                  <span className="size-2 rounded-full bg-slate-400" />
+                ) : stockFilter === 'IN_STOCK' ? (
+                  <span className="size-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />
+                ) : (
+                  <span className="size-2 rounded-full bg-rose-500 ring-2 ring-rose-200 animate-pulse" />
+                )}
 
-            {/* Sort Select */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="rounded-2xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs font-bold text-slate-700 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all shrink-0 cursor-pointer"
-            >
-              <option value="DEFAULT">Sort: Category Order</option>
-              <option value="NAME_ASC">Name (A → Z)</option>
-              <option value="NAME_DESC">Name (Z → A)</option>
-              <option value="PRICE_ASC">Price (Low → High)</option>
-              <option value="PRICE_DESC">Price (High → Low)</option>
-            </select>
+                <span className="font-extrabold">
+                  {stockFilter === 'ALL'
+                    ? 'All Stock'
+                    : stockFilter === 'IN_STOCK'
+                    ? 'In Stock'
+                    : "86'd Dishes"}
+                </span>
+
+                {/* Count Badge on button if filtered */}
+                {stockFilter === 'IN_STOCK' && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-200/70 text-emerald-900 text-[10px] font-black">
+                    {stats.inStockCount}
+                  </span>
+                )}
+                {stockFilter === 'OUT_OF_STOCK' && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-rose-200/80 text-rose-900 text-[10px] font-black">
+                    {stats.outOfStockCount}
+                  </span>
+                )}
+
+                <svg
+                  className={`size-3.5 text-slate-400 transition-all duration-200 group-hover:text-slate-700 ${
+                    stockMenuOpen ? 'rotate-180 text-rose-600' : 'group-hover:translate-y-0.5'
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
+
+              {/* Smooth Animated Stock Dropdown Menu */}
+              {stockMenuOpen && (
+                <div
+                  style={{ backgroundColor: '#ffffff' }}
+                  className="absolute left-0 sm:right-0 sm:left-auto top-full mt-2 w-72 rounded-2xl bg-white border border-slate-200 shadow-2xl shadow-slate-900/20 p-2 z-[999] animate-fade-in"
+                >
+                  {/* Header with quick reset */}
+                  <div className="flex items-center justify-between px-2.5 py-1.5 pb-2 border-b border-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <span>📦</span> Stock Availability
+                    </span>
+                    {stockFilter !== 'ALL' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStockFilter('ALL')
+                          setStockMenuOpen(false)
+                        }}
+                        className="text-[11px] font-extrabold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                      >
+                        Clear Filter
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Options List */}
+                  <div className="space-y-1.5 pt-2">
+                    {[
+                      {
+                        value: 'ALL',
+                        title: 'All Dishes',
+                        desc: 'Show complete menu catalog',
+                        count: rows.length,
+                        icon: '📦',
+                        iconBg: 'bg-slate-100 text-slate-700 border-slate-200',
+                        badgeBg: 'bg-slate-100 text-slate-600',
+                      },
+                      {
+                        value: 'IN_STOCK',
+                        title: 'In Stock Only',
+                        desc: 'Available for order & billing',
+                        count: stats.inStockCount,
+                        icon: '✅',
+                        iconBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                        badgeBg: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+                      },
+                      {
+                        value: 'OUT_OF_STOCK',
+                        title: "Out of Stock (86'd)",
+                        desc: 'Temporarily unavailable dishes',
+                        count: stats.outOfStockCount,
+                        icon: '⛔',
+                        iconBg: 'bg-rose-50 text-rose-700 border-rose-200',
+                        badgeBg: 'bg-rose-50 text-rose-700 border border-rose-200',
+                      },
+                    ].map((opt) => {
+                      const isSelected = stockFilter === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setStockFilter(opt.value)
+                            setStockMenuOpen(false)
+                          }}
+                          className={`group flex items-center justify-between w-full p-2.5 rounded-xl border text-left cursor-pointer transition-all duration-150 select-none active:scale-[0.99] ${
+                            isSelected
+                              ? 'bg-rose-50/90 border-rose-300 text-rose-950 shadow-xs'
+                              : 'bg-white border-transparent text-slate-700 hover:bg-slate-50 hover:border-slate-200 hover:text-slate-900'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`size-8.5 rounded-xl flex items-center justify-center text-sm font-bold border shrink-0 ${opt.iconBg}`}>
+                              {opt.icon}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-xs ${isSelected ? 'font-black text-rose-950' : 'font-bold text-slate-900'}`}>
+                                  {opt.title}
+                                </span>
+                              </div>
+                              <span className="block text-[10px] font-medium text-slate-400 leading-tight">
+                                {opt.desc}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${opt.badgeBg}`}>
+                              {opt.count}
+                            </span>
+                            {isSelected ? (
+                              <svg className="size-4 text-rose-600 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                            ) : (
+                              <div className="size-4 rounded-full border border-slate-200 group-hover:border-slate-300" />
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Custom Smooth Animated Sort Dropdown */}
+            <div ref={sortMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setSortMenuOpen((prev) => !prev)
+                  setStockMenuOpen(false)
+                }}
+                className={`group flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all duration-200 cursor-pointer select-none ${
+                  sortMenuOpen
+                    ? 'border-rose-500 bg-rose-50 text-rose-900 ring-2 ring-rose-200/80 shadow-sm font-black'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-rose-400 hover:bg-rose-50/40 hover:text-rose-900 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-95'
+                }`}
+              >
+                <span className="font-extrabold">
+                  {sortBy === 'DEFAULT'
+                    ? 'Sort: Category'
+                    : sortBy === 'NAME_ASC'
+                    ? 'Name (A → Z)'
+                    : sortBy === 'NAME_DESC'
+                    ? 'Name (Z → A)'
+                    : sortBy === 'PRICE_ASC'
+                    ? 'Price (Low → High)'
+                    : 'Price (High → Low)'}
+                </span>
+                <svg
+                  className={`size-3.5 text-slate-400 transition-all duration-200 group-hover:text-rose-500 ${
+                    sortMenuOpen ? 'rotate-180 text-rose-600' : 'group-hover:translate-y-0.5'
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
+
+              {/* Smooth Animated Sort Dropdown Menu */}
+              {sortMenuOpen && (
+                <div
+                  style={{ backgroundColor: '#ffffff' }}
+                  className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-2xl shadow-slate-900/20 p-2 z-[999] animate-fade-in divide-y divide-slate-100"
+                >
+                  <div className="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Sort Dishes By
+                  </div>
+                  <div className="space-y-1 pt-1.5">
+                    {[
+                      { value: 'DEFAULT', label: 'Category Order', sub: 'Default menu layout', icon: '🗂️' },
+                      { value: 'NAME_ASC', label: 'Name (A → Z)', sub: 'Alphabetical order', icon: '🔤' },
+                      { value: 'NAME_DESC', label: 'Name (Z → A)', sub: 'Reverse alphabetical', icon: '🔤' },
+                      { value: 'PRICE_ASC', label: 'Price (Low → High)', sub: 'Budget friendly first', icon: '💵' },
+                      { value: 'PRICE_DESC', label: 'Price (High → Low)', sub: 'Premium dishes first', icon: '💵' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setSortBy(opt.value)
+                          setSortMenuOpen(false)
+                        }}
+                        className={`group flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 text-left cursor-pointer select-none active:scale-[0.98] ${
+                          sortBy === opt.value
+                            ? 'bg-rose-50 text-rose-900 font-black border border-rose-200/80'
+                            : 'text-slate-700 bg-white hover:bg-slate-100 hover:text-slate-900'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span className="text-base transition-transform duration-200 group-hover:scale-125 inline-block">
+                            {opt.icon}
+                          </span>
+                          <span>
+                            <span className="block leading-tight">{opt.label}</span>
+                            <span className="block text-[10px] font-medium text-slate-400 leading-tight">{opt.sub}</span>
+                          </span>
+                        </span>
+                        {sortBy === opt.value ? (
+                          <svg className="size-4 text-rose-600 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        ) : (
+                          <span className="size-1.5 rounded-full bg-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Layout View Mode Switcher */}
-            <div className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 p-1 shrink-0">
+            <div className="flex items-center gap-0.5 rounded-xl border border-slate-200/90 bg-slate-100 p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode('table')}
-                title="Table View (Fast dense grid)"
-                className={`p-1.5 rounded-xl transition-all ${
-                  viewMode === 'table' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-600'
+                title="Table View (List)"
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'table' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <svg className="size-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                <svg className="size-4 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                 </svg>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
-                title="Card View (Visual tiles)"
-                className={`p-1.5 rounded-xl transition-all ${
-                  viewMode === 'grid' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-600'
+                title="Grid View (Cards)"
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'grid' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <svg className="size-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                  <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                  <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                  <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                <svg className="size-4 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
                 </svg>
               </button>
             </div>
           </div>
         </div>
-
-        {/* Active Filter Indicators */}
-        {(search || selectedCategory !== 'ALL' || foodType !== 'ALL' || stockFilter !== 'ALL' || sortBy !== 'DEFAULT') && (
-          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs flex-wrap">
-            <div className="flex items-center gap-1.5 text-slate-500 font-semibold flex-wrap">
-              <span>Found <strong className="text-slate-900 font-black">{filteredItems.length}</strong> matching dishes</span>
-              {search && <span className="bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">Keyword: "{search}"</span>}
-              {selectedCategory !== 'ALL' && (
-                <span className="bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">
-                  Category: {cats.find((c) => String(c.id) === String(selectedCategory))?.name}
-                </span>
-              )}
-              {foodType !== 'ALL' && <span className="bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">{foodType}</span>}
-              {stockFilter !== 'ALL' && <span className="bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">{stockFilter}</span>}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSearch('')
-                setSelectedCategory('ALL')
-                setFoodType('ALL')
-                setStockFilter('ALL')
-                setSortBy('DEFAULT')
-              }}
-              className="text-rose-600 font-bold hover:underline"
-            >
-              Reset all filters
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── 4. Main Dishes List (Table or Grid View) ── */}

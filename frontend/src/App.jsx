@@ -4,6 +4,7 @@ import { ToastProvider } from '@/context/ToastContext'
 import { SyncProvider } from '@/context/SyncContext'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import AnnotationOverlay from '@/components/annotation/AnnotationOverlay'
 import ComingSoon from '@/pages/ComingSoon'
 import Customers from '@/pages/Customers'
 import Dashboard from '@/pages/Dashboard'
@@ -19,6 +20,7 @@ import Tables from '@/pages/Tables'
 import Coupons from '@/pages/Coupons'
 import Feedback from '@/pages/Feedback'
 import WhatsApp from '@/pages/WhatsApp'
+import Explore from '@/pages/Explore'
 import { hasPermission } from '@/utils/roles'
 
 // Rebill Application Root - Hybrid Offline-First Architecture
@@ -45,12 +47,14 @@ export default function App() {
                 <Route path="whatsapp" element={<ProtectedRoute permission="view_whatsapp"><WhatsApp /></ProtectedRoute>} />
                 <Route path="coupons" element={<ProtectedRoute permission="view_coupons"><Coupons /></ProtectedRoute>} />
                 <Route path="reports" element={<ProtectedRoute permission="view_reports"><Reports /></ProtectedRoute>} />
+                <Route path="explore" element={<ProtectedRoute permission="view_explore"><Explore /></ProtectedRoute>} />
                 <Route path="settings" element={<ProtectedRoute permission="view_settings"><Settings /></ProtectedRoute>} />
               </Route>
             </Route>
 
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <AnnotationOverlay />
         </AuthProvider>
         </SyncProvider>
       </ToastProvider>
