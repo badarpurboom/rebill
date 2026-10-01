@@ -19,6 +19,12 @@ const ROUTE_FILE_MAP = {
 }
 
 export default function AnnotationOverlay() {
+  const isDev = Boolean(
+    import.meta.env.DEV ||
+    (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname))
+  )
+  if (!isDev) return null
+
   const location = useLocation()
   const navigate = useNavigate()
 
