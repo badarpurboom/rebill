@@ -292,6 +292,204 @@ function createConfiguredMcpServer() {
     }
   );
 
+  // 10. cancel_bill  ── WRITE (safe)
+  server.tool(
+    'cancel_bill',
+    `Cancel a single bill by its ID. 
+SAFETY: Only ONE bill at a time (bulk cancel is not possible). 
+Only RUNNING or BILLED bills can be cancelled — PAID bills cannot be undone. 
+NO data is deleted — status is set to CANCELLED and all records are preserved forever. 
+Every action is written to the audit log.`,
+    {
+      bill_id: z.number().int().positive().describe('The exact integer ID of the bill to cancel. Use run_sql_query to verify the bill first.'),
+      reason: z.string().optional().describe('Optional reason for cancellation (e.g. "Customer left", "Wrong order")'),
+    },
+    async ({ bill_id, reason }) => {
+      try {
+        const response = await api.post(`/bills/cancel/`, { bill_id, reason });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to cancel bill: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 11. toggle_menu_item_availability  ── WRITE (safe)
+  server.tool(
+    'toggle_menu_item_availability',
+    `Mark a menu item as available (in stock) or unavailable (out of stock).
+SAFETY: Requires exact item_id — no bulk toggle possible.
+Only the is_available boolean is changed — price, name, and all other data is untouched.
+Use run_sql_query on menu_items table to find the correct item_id first.`,
+    {
+      item_id: z.number().int().positive().describe('The exact integer ID of the menu item.'),
+      available: z.boolean().describe('true = mark as available, false = mark as unavailable/out-of-stock'),
+    },
+    async ({ item_id, available }) => {
+      try {
+        const response = await api.post(`/menu/toggle/`, { item_id, available });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to toggle menu item: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 12. update_menu_item_price  ── WRITE (safe)
+  server.tool(
+    'update_menu_item_price',
+    `Update the price of a specific menu item portion (e.g. Full, Half).
+SAFETY: Requires exact portion_id — no bulk price change possible.
+New price must be between ₹1 and ₹1,00,000. Only the price field is updated.
+Old price is saved to audit log before change.
+Use run_sql_query on menu_portions table to find the correct portion_id first.`,
+    {
+      portion_id: z.number().int().positive().describe('The exact integer ID of the portion/variant (from menu_portions table).'),
+      new_price: z.number().positive().describe('New price in Rupees (e.g. 250 for ₹250). Must be > 0.'),
+    },
+    async ({ portion_id, new_price }) => {
+      try {
+        const response = await api.post(`/menu/price/`, { portion_id, new_price });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to update price: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 13. update_customer  ── WRITE (safe)
+  server.tool(
+    'update_customer',
+    `Update a customer's name or phone number.
+SAFETY: Requires exact customer_id — no bulk update possible.
+Only name and phone fields can be changed — loyalty points, visit history, and all other data is untouched.
+No delete operation exists for customers.`,
+    {
+      customer_id: z.number().int().positive().describe('The exact integer ID of the customer.'),
+      name: z.string().optional().describe('New name for the customer (optional)'),
+      phone: z.string().optional().describe('New phone number for the customer (optional, 7-15 digits)'),
+    },
+    async ({ customer_id, name, phone }) => {
+      try {
+        const response = await api.post(`/customers/update/`, { customer_id, name, phone });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to update customer: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // ── FLOOR MAP TOOLS ──────────────────────────────────────────────────────
+
+  // 14. get_all_tables
+  server.tool(
+    'get_all_tables',
+    'Get all restaurant tables with their live status (AVAILABLE/OCCUPIED/BILLED), running orders, and current items. Use this to see the full floor map picture.',
+    {},
+    async () => {
+      try {
+        const response = await api.get(`/tables/`);
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to get tables: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 15. get_table_detail
+  server.tool(
+    'get_table_detail',
+    'Get full details of a single table: status, all running order items, and bill summary. Use number="1" or table_id=5.',
+    {
+      number: z.string().optional().describe('Table number as string e.g. "1", "5", "12"'),
+      table_id: z.number().int().positive().optional().describe('Internal table ID (use if you know it)'),
+    },
+    async ({ number, table_id }) => {
+      try {
+        const params = table_id ? { table_id } : { number };
+        const response = await api.get(`/tables/detail/`, { params });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to get table detail: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 16. update_table_status
+  server.tool(
+    'update_table_status',
+    `Manually change a table's status to AVAILABLE, OCCUPIED, or BILLED.
+SAFETY: Requires table number or table_id. Only status field is changed. Audit logged.
+Use "AVAILABLE" to free a table, "OCCUPIED" when guests arrive.`,
+    {
+      number: z.string().optional().describe('Table number e.g. "1", "5"'),
+      table_id: z.number().int().positive().optional().describe('Internal table ID'),
+      status: z.enum(['AVAILABLE', 'OCCUPIED', 'BILLED']).describe('New status for the table'),
+    },
+    async ({ number, table_id, status }) => {
+      try {
+        const response = await api.post(`/tables/status/`, { number, table_id, status });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to update table status: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 17. add_item_to_table_order
+  server.tool(
+    'add_item_to_table_order',
+    `Add a menu item to a table's currently running order.
+SAFETY: Table must have a running order. Item must be available. Quantity max 50.
+You can search by item_name (fuzzy match) or provide exact variant_id.
+Example: add 2x "Water Bottle" to Table 1.`,
+    {
+      number: z.string().optional().describe('Table number e.g. "1"'),
+      table_id: z.number().int().positive().optional().describe('Internal table ID'),
+      item_name: z.string().optional().describe('Menu item name to search (e.g. "Water Bottle", "Paneer Tikka")'),
+      variant_id: z.number().int().positive().optional().describe('Exact variant/portion ID if known'),
+      portion: z.enum(['FULL', 'HALF']).default('FULL').describe('Portion: FULL (default) or HALF'),
+      quantity: z.number().int().min(1).max(50).default(1).describe('Number of pieces to add (1–50)'),
+      note: z.string().optional().describe('Special instruction e.g. "kam mirchi", "extra cheese"'),
+    },
+    async ({ number, table_id, item_name, variant_id, portion, quantity, note }) => {
+      try {
+        const response = await api.post(`/tables/add-item/`, { number, table_id, item_name, variant_id, portion, quantity, note });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to add item: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 18. remove_item_from_order
+  server.tool(
+    'remove_item_from_order',
+    `Remove a specific item from a running order by its order_item_id.
+SAFETY: Requires explicit order_item_id (no bulk remove). Only works on RUNNING/BILLED orders.
+Use get_table_detail first to see order_item_id values for each item on the table.`,
+    {
+      order_item_id: z.number().int().positive().describe('The order_item_id of the specific item to remove. Get this from get_table_detail.'),
+    },
+    async ({ order_item_id }) => {
+      try {
+        const response = await api.post(`/tables/remove-item/`, { order_item_id });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to remove item: ${errDetail}` }] };
+      }
+    }
+  );
+
   return server;
 }
 
