@@ -54,7 +54,7 @@ export default function App() {
 
             <Route path="*" element={<NotFound />} />
           </Routes>
-          <AnnotationOverlay />
+          {import.meta.env.DEV && <AnnotationOverlay />}
         </AuthProvider>
         </SyncProvider>
       </ToastProvider>
