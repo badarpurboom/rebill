@@ -107,19 +107,76 @@ export default function MenuGrid({ items, categories, busyVariant, onAdd, disabl
     return categories.filter((c) => categoryIdsWithItems.has(String(c.id)))
   }, [items, categories])
 
-  const fuse = useMemo(() => {
-    return new Fuse(items, {
-      keys: ['name', 'short_code', 'category_name'],
-      threshold: 0.4,
-      ignoreLocation: true,
+  // Pre-calculate acronyms/initials for instant short-code matching (e.g. "wb" -> "Water Bottle")
+  const enrichedItems = useMemo(() => {
+    return items.map((item) => {
+      const words = (item.name || '').trim().split(/[\s\-_/]+/).filter(Boolean)
+      const initials = words.map((w) => w[0]?.toLowerCase()).join('')
+      return {
+        ...item,
+        _initials: initials,
+        _nameLower: (item.name || '').toLowerCase(),
+        _catLower: (item.category_name || '').toLowerCase(),
+        _shortCodeLower: (item.short_code || '').toLowerCase(),
+      }
     })
   }, [items])
 
+  const fuse = useMemo(() => {
+    return new Fuse(enrichedItems, {
+      keys: [
+        { name: 'name', weight: 0.5 },
+        { name: '_initials', weight: 0.4 },
+        { name: 'short_code', weight: 0.3 },
+        { name: 'category_name', weight: 0.1 },
+      ],
+      threshold: 0.35,
+      ignoreLocation: true,
+    })
+  }, [enrichedItems])
+
   const visible = useMemo(() => {
-    const needle = search.trim()
-    let searchResults = items
-    if (needle) {
-      searchResults = fuse.search(needle).map((result) => result.item)
+    const q = search.trim().toLowerCase()
+    let searchResults = enrichedItems
+
+    if (q) {
+      const exactAcronym = []
+      const prefixAcronym = []
+      const prefixName = []
+      const wordPrefix = []
+      const seenIds = new Set()
+
+      enrichedItems.forEach((it) => {
+        if (it._initials === q) {
+          exactAcronym.push(it)
+          seenIds.add(it.id)
+        } else if (it._initials.startsWith(q) && q.length > 1) {
+          prefixAcronym.push(it)
+          seenIds.add(it.id)
+        } else if (it._nameLower.startsWith(q)) {
+          prefixName.push(it)
+          seenIds.add(it.id)
+        } else {
+          const words = it._nameLower.split(/[\s\-_/]+/)
+          if (words.some((w) => w.startsWith(q))) {
+            wordPrefix.push(it)
+            seenIds.add(it.id)
+          }
+        }
+      })
+
+      // Fuzzy search for remaining items & typos
+      const fuzzyResults = fuse.search(q)
+        .map((r) => r.item)
+        .filter((it) => !seenIds.has(it.id))
+
+      searchResults = [
+        ...exactAcronym,
+        ...prefixAcronym,
+        ...prefixName,
+        ...wordPrefix,
+        ...fuzzyResults,
+      ]
     }
 
     return searchResults.filter(
@@ -128,7 +185,7 @@ export default function MenuGrid({ items, categories, busyVariant, onAdd, disabl
         (categoryId === 'all' || String(item.category) === categoryId) &&
         (foodType === 'all' || item.food_type === foodType)
     )
-  }, [items, fuse, search, categoryId, foodType])
+  }, [enrichedItems, fuse, search, categoryId, foodType])
 
   const resetFilters = () => {
     setSearch('')
@@ -213,7 +270,7 @@ export default function MenuGrid({ items, categories, busyVariant, onAdd, disabl
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search dishes... (press '/' to focus)"
+            placeholder="Search dishes or initials (e.g. 'wb' for Water Bottle, press '/')..."
             className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-14 text-xs font-medium text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 shadow-sm transition"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">

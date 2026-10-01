@@ -3,7 +3,7 @@ import csv
 from io import StringIO
 from django.contrib.auth import authenticate
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Avg, Count, Q, Sum
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -493,6 +493,41 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
     def get_serializer_class(self):
         return BillListSerializer if self.action == 'list' else BillSerializer
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Aggregate summary statistics across the entire filtered queryset
+        summary_data = queryset.aggregate(
+            total_revenue=Sum('net_payable', filter=Q(status=BillStatus.PAID)),
+            paid_count=Count('id', filter=Q(status=BillStatus.PAID)),
+            unpaid_count=Count('id', filter=Q(status=BillStatus.UNPAID)),
+            cancelled_count=Count('id', filter=Q(status=BillStatus.CANCELLED)),
+            avg_ticket=Avg('net_payable', filter=Q(status=BillStatus.PAID)),
+            total_count=Count('id')
+        )
+
+        summary_payload = {
+            'total_revenue': float(summary_data['total_revenue'] or 0),
+            'paid_count': int(summary_data['paid_count'] or 0),
+            'unpaid_count': int(summary_data['unpaid_count'] or 0),
+            'cancelled_count': int(summary_data['cancelled_count'] or 0),
+            'avg_ticket': round(float(summary_data['avg_ticket'] or 0), 2),
+            'total_count': int(summary_data['total_count'] or 0),
+        }
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+            response.data['summary'] = summary_payload
+            return response
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'results': serializer.data,
+            'summary': summary_payload
+        })
+
     def get_queryset(self):
         qs = Bill.objects.select_related(
             'order__table', 'customer', 'created_by', 'discount_approved_by', 'cancelled_by'
@@ -500,31 +535,59 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
 
         params = self.request.query_params
         if search := (params.get('search') or '').strip():
+            clean_search = search.replace('#', '').replace('TK-', '').replace('tk-', '')
             qs = qs.filter(
                 Q(bill_number__icontains=search)
                 | Q(customer__name__icontains=search)
-                | Q(customer__phone__contains=search)
-                | Q(order__table__number=search)
+                | Q(customer__phone__icontains=search)
+                | Q(order__table__number__icontains=search)
+                | Q(order__tag_name__icontains=search)
+                | Q(order__id__icontains=clean_search)
             )
+        if order_type := params.get('order_type'):
+            qs = qs.filter(order_type=order_type)
         if status_filter := params.get('status'):
             qs = qs.filter(status=status_filter)
         if mode := params.get('payment_mode'):
             qs = qs.filter(payment_mode=mode)
 
-        # Date Presets Handling: today, week, month, 6_months, 1_year, custom
+        # Date Presets Handling: today, yesterday, week, last_week, month, last_month, last_7_days, last_30_days, last_90_days, 6_months, 1_year, custom
         period = params.get('period')
         today = timezone.localdate()
 
         if period == 'today':
             qs = qs.filter(created_at__date=today)
-        elif period == 'week':
-            qs = qs.filter(created_at__date__gte=today - timedelta(days=7))
-        elif period == 'month':
-            qs = qs.filter(created_at__date__gte=today - timedelta(days=30))
-        elif period == '6_months':
-            qs = qs.filter(created_at__date__gte=today - timedelta(days=180))
-        elif period == '1_year':
-            qs = qs.filter(created_at__date__gte=today - timedelta(days=365))
+        elif period == 'yesterday':
+            qs = qs.filter(created_at__date=today - timedelta(days=1))
+        elif period in ('this_week', 'week'):
+            start_of_week = today - timedelta(days=today.weekday())
+            qs = qs.filter(created_at__date__gte=start_of_week, created_at__date__lte=today)
+        elif period == 'last_week':
+            start_of_last_week = today - timedelta(days=today.weekday() + 7)
+            end_of_last_week = today - timedelta(days=today.weekday() + 1)
+            qs = qs.filter(created_at__date__gte=start_of_last_week, created_at__date__lte=end_of_last_week)
+        elif period in ('this_month', 'month'):
+            qs = qs.filter(created_at__date__gte=today.replace(day=1), created_at__date__lte=today)
+        elif period == 'last_month':
+            first_of_this_month = today.replace(day=1)
+            last_of_last_month = first_of_this_month - timedelta(days=1)
+            first_of_last_month = last_of_last_month.replace(day=1)
+            qs = qs.filter(created_at__date__gte=first_of_last_month, created_at__date__lte=last_of_last_month)
+        elif period == 'last_7_days':
+            qs = qs.filter(created_at__date__gte=today - timedelta(days=7), created_at__date__lte=today)
+        elif period == 'last_30_days':
+            qs = qs.filter(created_at__date__gte=today - timedelta(days=30), created_at__date__lte=today)
+        elif period in ('last_90_days', '3_months'):
+            qs = qs.filter(created_at__date__gte=today - timedelta(days=90), created_at__date__lte=today)
+        elif period in ('6_months', 'last_6_months'):
+            qs = qs.filter(created_at__date__gte=today - timedelta(days=180), created_at__date__lte=today)
+        elif period in ('1_year', 'this_year', 'year'):
+            qs = qs.filter(created_at__date__gte=today.replace(month=1, day=1), created_at__date__lte=today)
+        elif period == 'custom':
+            if date_from := params.get('from'):
+                qs = qs.filter(created_at__date__gte=date_from)
+            if date_to := params.get('to'):
+                qs = qs.filter(created_at__date__lte=date_to)
         else:
             if date_from := params.get('from'):
                 qs = qs.filter(created_at__date__gte=date_from)
@@ -534,37 +597,204 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
     @action(detail=False, methods=['get'], permission_classes=[HasDynamicPermission('view_orders')])
+    def export_excel(self, request):
+        """Export filtered bills to styled Microsoft Excel (.xlsx) spreadsheet."""
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        from io import BytesIO
+
+        qs = self.get_queryset()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Order History"
+
+        headers = [
+            'Bill #',
+            'Date & Time',
+            'Order Type',
+            'Table / Token',
+            'Customer Name',
+            'Customer Phone',
+            'Subtotal (₹)',
+            'Discount %',
+            'Discount Amt (₹)',
+            'Taxable (₹)',
+            'CGST (₹)',
+            'SGST (₹)',
+            'Total Tax (₹)',
+            'Points Redeemed',
+            'Net Payable (₹)',
+            'Payment Mode',
+            'Status',
+        ]
+        ws.append(headers)
+
+        header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        center_align = Alignment(horizontal="center", vertical="center")
+        right_align = Alignment(horizontal="right", vertical="center")
+        left_align = Alignment(horizontal="left", vertical="center")
+
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center_align
+        ws.row_dimensions[1].height = 26
+
+        total_subtotal = 0.0
+        total_discount = 0.0
+        total_tax = 0.0
+        total_revenue = 0.0
+        paid_count = 0
+
+        row_num = 2
+        for bill in qs:
+            order_type_display = 'Dine-In' if (bill.order_type == 'DINE_IN' or (bill.order and bill.order.order_type == 'DINE_IN')) else 'Takeaway'
+            table_token = bill.order.table.number if (bill.order and bill.order.table) else (bill.order.tag_name if bill.order else '')
+            cust_name = bill.customer.name if bill.customer else ''
+            cust_phone = bill.customer.phone if bill.customer else ''
+            created_str = timezone.localtime(bill.created_at).strftime('%Y-%m-%d %H:%M:%S')
+
+            subtotal_val = float(bill.subtotal or 0)
+            disc_pct = float(bill.discount_percent or 0)
+            disc_amt = float(bill.discount_amount or 0)
+            taxable_val = float(bill.taxable_amount or 0)
+            cgst_val = float(bill.cgst_amount or 0)
+            sgst_val = float(bill.sgst_amount or 0)
+            tot_tax_val = cgst_val + sgst_val
+            points_val = int(bill.points_redeemed or 0)
+            net_val = float(bill.net_payable or 0)
+
+            if bill.status == 'PAID':
+                paid_count += 1
+                total_subtotal += subtotal_val
+                total_discount += disc_amt
+                total_tax += tot_tax_val
+                total_revenue += net_val
+
+            row_data = [
+                f"#{bill.bill_number}",
+                created_str,
+                order_type_display,
+                str(table_token),
+                cust_name,
+                cust_phone,
+                round(subtotal_val, 2),
+                round(disc_pct, 2),
+                round(disc_amt, 2),
+                round(taxable_val, 2),
+                round(cgst_val, 2),
+                round(sgst_val, 2),
+                round(tot_tax_val, 2),
+                points_val,
+                round(net_val, 2),
+                bill.get_payment_mode_display() if hasattr(bill, 'get_payment_mode_display') else (bill.payment_mode or ''),
+                bill.get_status_display() if hasattr(bill, 'get_status_display') else bill.status,
+            ]
+            ws.append(row_data)
+
+            for col_idx in range(1, len(headers) + 1):
+                c = ws.cell(row=row_num, column=col_idx)
+                c.border = thin_border
+                c.font = Font(name="Calibri", size=10)
+                if col_idx in (7, 8, 9, 10, 11, 12, 13, 14, 15):
+                    c.alignment = right_align
+                    if col_idx in (7, 9, 10, 11, 12, 13, 15):
+                        c.number_format = '#,##0.00'
+                elif col_idx in (1, 2, 3, 4, 16, 17):
+                    c.alignment = center_align
+                else:
+                    c.alignment = left_align
+
+            ws.row_dimensions[row_num].height = 20
+            row_num += 1
+
+        # Summary Row
+        if qs.exists():
+            summary_row = ws.max_row + 1
+            ws.cell(row=summary_row, column=1, value="TOTAL (Paid Orders)")
+            ws.cell(row=summary_row, column=7, value=round(total_subtotal, 2))
+            ws.cell(row=summary_row, column=9, value=round(total_discount, 2))
+            ws.cell(row=summary_row, column=13, value=round(total_tax, 2))
+            ws.cell(row=summary_row, column=15, value=round(total_revenue, 2))
+
+            for col_idx in range(1, len(headers) + 1):
+                cell = ws.cell(row=summary_row, column=col_idx)
+                cell.font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+                cell.fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+                cell.border = thin_border
+                if col_idx in (7, 9, 13, 15):
+                    cell.alignment = right_align
+                    cell.number_format = '#,##0.00'
+            ws.row_dimensions[summary_row].height = 22
+
+        # Auto column width
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 13)
+
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        filename = f"rebill-orders-{timezone.localdate().strftime('%Y-%m-%d')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=False, methods=['get'], permission_classes=[HasDynamicPermission('view_orders')])
     def export_csv(self, request):
-        """Export filtered bills to CSV."""
+        """Export filtered bills to CSV with UTF-8 BOM for Excel compatibility."""
         qs = self.get_queryset()
         output = StringIO()
+        output.write('\ufeff')  # UTF-8 BOM for Excel compatibility
         writer = csv.writer(output)
         writer.writerow([
-            'bill_number', 'date', 'customer_name', 'customer_phone',
-            'order_type', 'table_number', 'payment_mode', 'status',
-            'subtotal', 'cgst', 'sgst', 'total_amount', 'discount_percent', 'points_redeemed'
+            'Bill #', 'Date & Time', 'Order Type', 'Table / Token', 'Customer Name', 'Customer Phone',
+            'Subtotal', 'Discount %', 'Discount Amt', 'Taxable', 'CGST', 'SGST', 'Total Tax',
+            'Points Redeemed', 'Net Payable', 'Payment Mode', 'Status'
         ])
 
         for bill in qs:
+            order_type_display = 'Dine-In' if (bill.order_type == 'DINE_IN' or (bill.order and bill.order.order_type == 'DINE_IN')) else 'Takeaway'
+            table_token = bill.order.table.number if (bill.order and bill.order.table) else (bill.order.tag_name if bill.order else '')
+            tot_tax = (bill.cgst_amount or 0) + (bill.sgst_amount or 0)
             writer.writerow([
                 bill.bill_number,
-                bill.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                timezone.localtime(bill.created_at).strftime('%Y-%m-%d %H:%M:%S'),
+                order_type_display,
+                table_token,
                 bill.customer.name if bill.customer else '',
                 bill.customer.phone if bill.customer else '',
-                bill.order.order_type if bill.order else 'TAKEAWAY',
-                bill.order.table.number if (bill.order and bill.order.table) else '',
-                bill.payment_mode,
-                bill.status,
                 str(bill.subtotal),
+                str(bill.discount_percent),
+                str(bill.discount_amount),
+                str(bill.taxable_amount),
                 str(bill.cgst_amount),
                 str(bill.sgst_amount),
-                str(bill.net_payable),
-                str(bill.discount_percent),
+                str(tot_tax),
                 str(bill.points_redeemed),
+                str(bill.net_payable),
+                bill.payment_mode,
+                bill.status,
             ])
 
-        response = HttpResponse(output.getvalue(), content_type='text/csv; charset=utf-8')
-        response['Content-Disposition'] = 'attachment; filename="rebill-bills-export.csv"'
+        response = HttpResponse(output.getvalue(), content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = f'attachment; filename="rebill-bills-export-{timezone.localdate().strftime("%Y-%m-%d")}.csv"'
         return response
 
     @action(

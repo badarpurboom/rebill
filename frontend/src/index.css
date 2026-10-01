@@ -91,6 +91,45 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid rgba(226, 232, 240, 0.8);
 }
 
+/* Modal Ultra-Smooth Animations */
+@keyframes modalBackdropFadeIn {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+}
+
+@keyframes modalContentPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(14px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.008) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-backdrop {
+  animation: modalBackdropFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, backdrop-filter;
+}
+
+.animate-modal-pop {
+  animation: modalContentPopIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
 /* Custom Styles: Canvas Dot Grid, Aurora & Liquid Glass Physics */
 .bg-dot-matrix {
   background-color: #05060b;
