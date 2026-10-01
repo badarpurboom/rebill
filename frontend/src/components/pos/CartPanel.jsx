@@ -87,11 +87,13 @@ export default function CartPanel({
         <button
           type="button"
           onClick={onAddCustomItem}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50/80 hover:bg-amber-100/70 border border-amber-200/80 px-2.5 py-0.5 rounded-xl transition active:scale-95 duration-150 cursor-pointer"
           id="customItemBtn"
+          className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold text-amber-900 bg-gradient-to-r from-amber-50 via-amber-100/50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-300/80 shadow-2xs hover:shadow-xs hover:border-amber-400 active:scale-95 transition-all duration-150 cursor-pointer"
         >
-          <i className="fa-regular fa-plus-circle text-amber-600 text-xs"></i>
-          Custom Item
+          <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-700 flex items-center justify-center text-[9px] group-hover:bg-amber-600 group-hover:text-white transition-colors duration-150">
+            <i className="fa-solid fa-plus"></i>
+          </span>
+          <span className="tracking-tight font-extrabold">Custom Item</span>
         </button>
       </div>
 
