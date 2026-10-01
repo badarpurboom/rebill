@@ -43,7 +43,27 @@ export const bills = {
   cancel: (id, payload) =>
     api.post(`/billing/bills/${id}/cancel/`, payload).then((r) => r.data),
 
+  exportExcel: async (params) => {
+    const response = await api.get('/billing/bills/export_excel/', { params, responseType: 'blob' })
+    const url = URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `rebill-orders-${new Date().toISOString().slice(0, 10)}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
+  },
+
   exportFile: async (params) => {
+    const response = await api.get('/billing/bills/export_excel/', { params, responseType: 'blob' })
+    const url = URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `rebill-orders-${new Date().toISOString().slice(0, 10)}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
+  },
+
+  exportCsv: async (params) => {
     const response = await api.get('/billing/bills/export_csv/', { params, responseType: 'blob' })
     const url = URL.createObjectURL(response.data)
     const link = document.createElement('a')
