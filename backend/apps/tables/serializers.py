@@ -99,3 +99,4 @@ class BulkCreateTablesSerializer(serializers.Serializer):
     count = serializers.IntegerField(min_value=1, max_value=200)
     seats = serializers.IntegerField(min_value=1, max_value=30, default=4)
     start_from = serializers.IntegerField(min_value=1, default=1)
+    label = serializers.CharField(max_length=40, required=False, allow_blank=True, default='')

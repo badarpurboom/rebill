@@ -21,6 +21,7 @@ import Coupons from '@/pages/Coupons'
 import Feedback from '@/pages/Feedback'
 import WhatsApp from '@/pages/WhatsApp'
 import Explore from '@/pages/Explore'
+import TableManagement from '@/pages/TableManagement'
 import { hasPermission } from '@/utils/roles'
 
 // Rebill Application Root - Hybrid Offline-First Architecture
@@ -48,6 +49,7 @@ export default function App() {
                 <Route path="coupons" element={<ProtectedRoute permission="view_coupons"><Coupons /></ProtectedRoute>} />
                 <Route path="reports" element={<ProtectedRoute permission="view_reports"><Reports /></ProtectedRoute>} />
                 <Route path="explore" element={<ProtectedRoute permission="view_explore"><Explore /></ProtectedRoute>} />
+                <Route path="table-management" element={<ProtectedRoute permission="view_floor_map"><TableManagement /></ProtectedRoute>} />
                 <Route path="settings" element={<ProtectedRoute permission="view_settings"><Settings /></ProtectedRoute>} />
               </Route>
             </Route>

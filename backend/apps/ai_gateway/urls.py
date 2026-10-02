@@ -15,10 +15,16 @@ from .views import (
     AIToggleMenuItemView,
     AIUpdateMenuPriceView,
     AIUpdateCustomerView,
-    # ── Floor Map views ──
+    # ── Floor Map & Table Management views ──
     AIGetAllTablesView,
     AIGetTableDetailView,
     AIUpdateTableStatusView,
+    AICreateTableView,
+    AIUpdateTableView,
+    AIDeleteTableView,
+    AIRearrangeTablesView,
+    AIBulkCreateTablesView,
+    AITransferTableOrderView,
     AIAddItemToOrderView,
     AIRemoveItemFromOrderView,
 )
@@ -39,10 +45,16 @@ urlpatterns = [
     path('menu/toggle/', AIToggleMenuItemView.as_view(), name='ai-toggle-menu-item'),
     path('menu/price/', AIUpdateMenuPriceView.as_view(), name='ai-update-menu-price'),
     path('customers/update/', AIUpdateCustomerView.as_view(), name='ai-update-customer'),
-    # ── Floor Map endpoints ──
+    # ── Floor Map & Table Management endpoints ──
     path('tables/', AIGetAllTablesView.as_view(), name='ai-get-all-tables'),
     path('tables/detail/', AIGetTableDetailView.as_view(), name='ai-get-table-detail'),
     path('tables/status/', AIUpdateTableStatusView.as_view(), name='ai-update-table-status'),
+    path('tables/create/', AICreateTableView.as_view(), name='ai-create-table'),
+    path('tables/update/', AIUpdateTableView.as_view(), name='ai-update-table'),
+    path('tables/delete/', AIDeleteTableView.as_view(), name='ai-delete-table'),
+    path('tables/layout/', AIRearrangeTablesView.as_view(), name='ai-rearrange-tables'),
+    path('tables/bulk-create/', AIBulkCreateTablesView.as_view(), name='ai-bulk-create-tables'),
+    path('tables/transfer/', AITransferTableOrderView.as_view(), name='ai-transfer-table-order'),
     path('tables/add-item/', AIAddItemToOrderView.as_view(), name='ai-add-item-to-order'),
     path('tables/remove-item/', AIRemoveItemFromOrderView.as_view(), name='ai-remove-item-from-order'),
 ]

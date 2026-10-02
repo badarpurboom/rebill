@@ -490,6 +490,146 @@ Use get_table_detail first to see order_item_id values for each item on the tabl
     }
   );
 
+  // 19. create_table ── WRITE (safe)
+  server.tool(
+    'create_table',
+    `Create a new restaurant table on the floor plan.
+SAFETY: Checks for duplicate table number before creation. Audit logged.`,
+    {
+      number: z.string().describe('Unique table identifier (e.g. "21", "T-21", "VIP-1")'),
+      seats: z.number().int().min(1).max(50).default(4).describe('Seating capacity (1-50, default: 4)'),
+      label: z.string().optional().describe('Section or zone name (e.g. "Main Dining", "Garden", "Rooftop", "Couples Section")'),
+      shape: z.enum(['SQUARE', 'ROUND', 'RECT']).default('SQUARE').describe('Table shape: SQUARE, ROUND, or RECT'),
+      pos_x: z.number().int().min(0).default(0).describe('Grid X coordinate for floor plan (0-based)'),
+      pos_y: z.number().int().min(0).default(0).describe('Grid Y coordinate for floor plan (0-based)'),
+      is_active: z.boolean().default(true).describe('Whether table is active and available for billing (default: true)'),
+    },
+    async ({ number, seats, label, shape, pos_x, pos_y, is_active }) => {
+      try {
+        const response = await api.post(`/tables/create/`, { number, seats, label, shape, pos_x, pos_y, is_active });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to create table: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 20. update_table ── WRITE (safe)
+  server.tool(
+    'update_table',
+    `Update an existing table's properties (number, seats, section/label, shape, active status, grid coordinates).
+SAFETY: Table must exist. If changing table number, checks for duplicates. Audit logged.`,
+    {
+      number: z.string().optional().describe('Current table number (e.g. "21")'),
+      table_id: z.number().int().positive().optional().describe('Internal table ID'),
+      new_number: z.string().optional().describe('New table number/label if renaming'),
+      seats: z.number().int().min(1).max(50).optional().describe('Updated seating capacity (1-50)'),
+      label: z.string().optional().describe('Updated section name (e.g. "Main Dining", "Rooftop", "VIP")'),
+      shape: z.enum(['SQUARE', 'ROUND', 'RECT']).optional().describe('Updated shape: SQUARE, ROUND, or RECT'),
+      is_active: z.boolean().optional().describe('Active status (true=in use, false=deactivated)'),
+      pos_x: z.number().int().min(0).optional().describe('Updated grid X position'),
+      pos_y: z.number().int().min(0).optional().describe('Updated grid Y position'),
+    },
+    async (params) => {
+      try {
+        const response = await api.post(`/tables/update/`, params);
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to update table: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 21. delete_table ── WRITE (safe)
+  server.tool(
+    'delete_table',
+    `Safely delete or deactivate a restaurant table.
+SAFETY: Strictly prevents deletion if table has an active running order or open bill. Provide deactivate_only=true to temporarily deactivate without deleting. Audit logged.`,
+    {
+      number: z.string().optional().describe('Table number to delete (e.g. "21")'),
+      table_id: z.number().int().positive().optional().describe('Internal table ID to delete'),
+      deactivate_only: z.boolean().default(false).describe('If true, sets table as inactive instead of permanently deleting'),
+    },
+    async ({ number, table_id, deactivate_only }) => {
+      try {
+        const response = await api.post(`/tables/delete/`, { number, table_id, deactivate_only });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to delete table: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 22. rearrange_tables ── WRITE (safe)
+  server.tool(
+    'rearrange_tables',
+    `Reposition and arrange multiple tables on the visual floor plan grid in batch.
+Example layout format: [{"number": "1", "pos_x": 0, "pos_y": 0}, {"number": "2", "pos_x": 1, "pos_y": 0}]`,
+    {
+      layout: z.array(z.object({
+        number: z.string().optional().describe('Table number e.g. "1"'),
+        table_id: z.number().int().positive().optional().describe('Internal table ID'),
+        pos_x: z.number().int().min(0).describe('Grid X coordinate'),
+        pos_y: z.number().int().min(0).describe('Grid Y coordinate'),
+      })).describe('Array of table positioning coordinates'),
+    },
+    async ({ layout }) => {
+      try {
+        const response = await api.post(`/tables/layout/`, { layout });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to rearrange tables: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 23. bulk_create_tables ── WRITE (safe)
+  server.tool(
+    'bulk_create_tables',
+    `Quickly generate multiple tables in bulk with auto grid layout.
+Example: create 5 tables starting from number 15 with 4 seats in "Rooftop" section.`,
+    {
+      count: z.number().int().min(1).max(50).describe('How many tables to generate (1-50)'),
+      seats: z.number().int().min(1).max(30).default(4).describe('Seats per table (default: 4)'),
+      start_from: z.number().int().min(1).default(1).describe('Starting table number (default: 1)'),
+      label: z.string().optional().describe('Section/zone name (e.g. "Rooftop", "Family Dining")'),
+      shape: z.enum(['SQUARE', 'ROUND', 'RECT']).default('SQUARE').describe('Table shape: SQUARE, ROUND, or RECT'),
+    },
+    async ({ count, seats, start_from, label, shape }) => {
+      try {
+        const response = await api.post(`/tables/bulk-create/`, { count, seats, start_from, label, shape });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to bulk create tables: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 24. transfer_table_order ── WRITE (safe)
+  server.tool(
+    'transfer_table_order',
+    `Move an active order from one occupied table to another empty available table.
+SAFETY: Source table must have an active order. Target table must be AVAILABLE and active.`,
+    {
+      source_table: z.string().describe('Source occupied table number or ID (e.g. "9")'),
+      target_table: z.string().describe('Target empty table number or ID (e.g. "12")'),
+    },
+    async ({ source_table, target_table }) => {
+      try {
+        const response = await api.post(`/tables/transfer/`, { source_table, target_table });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to transfer table order: ${errDetail}` }] };
+      }
+    }
+  );
+
   return server;
 }
 

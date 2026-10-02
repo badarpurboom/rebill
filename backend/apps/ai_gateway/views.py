@@ -1032,3 +1032,338 @@ class AIRemoveItemFromOrderView(APIView):
             'message': f'Removed "{before["item_name"]} ({before["portion"]}) x{before["qty"]}" from Order #{before["order_id"]}.',
             'removed': before,
         }, status=status.HTTP_200_OK)
+
+
+# ── TABLE MANAGEMENT ENDPOINTS ──────────────────────────────────────────
+
+class AICreateTableView(APIView):
+    """
+    AI WRITE — Create a new restaurant table.
+    Safety: Unique table number validation, audit logged.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def post(self, request):
+        from apps.tables.models import RestaurantTable, TableShape
+
+        number = str(request.data.get('number', '')).strip()
+        if not number:
+            return Response({'error': 'number is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if RestaurantTable.objects.filter(number=number).exists():
+            return Response({'error': f'Table number "{number}" already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            seats = max(1, min(50, int(request.data.get('seats', 4))))
+        except (ValueError, TypeError):
+            return Response({'error': 'seats must be an integer (1-50).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        label = str(request.data.get('label', request.data.get('section', 'Main Dining'))).strip()
+        shape = str(request.data.get('shape', 'SQUARE')).upper()
+        if shape not in ('SQUARE', 'ROUND', 'RECT'):
+            shape = 'SQUARE'
+
+        pos_x = int(request.data.get('pos_x', 0))
+        pos_y = int(request.data.get('pos_y', 0))
+        is_active = bool(request.data.get('is_active', True))
+
+        table = RestaurantTable.objects.create(
+            number=number,
+            label=label,
+            seats=seats,
+            shape=shape,
+            pos_x=max(0, pos_x),
+            pos_y=max(0, pos_y),
+            is_active=is_active,
+        )
+
+        _ai_audit_log('create_table', 'restauranttable', table.id, {}, {
+            'number': table.number, 'seats': table.seats, 'label': table.label, 'shape': table.shape
+        })
+
+        return Response({
+            'success': True,
+            'message': f'Created Table {table.number} ({table.seats} seats, {table.label}).',
+            'table': {
+                'id': table.id,
+                'number': table.number,
+                'label': table.label,
+                'seats': table.seats,
+                'shape': table.shape,
+                'status': table.status,
+                'pos_x': table.pos_x,
+                'pos_y': table.pos_y,
+                'is_active': table.is_active,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+
+class AIUpdateTableView(APIView):
+    """
+    AI WRITE — Update an existing table's properties (seats, section, shape, active, coordinates).
+    Safety: Table must exist, audit logged.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def post(self, request):
+        from apps.tables.models import RestaurantTable
+
+        table_id = request.data.get('table_id')
+        number = request.data.get('number')
+
+        if not table_id and not number:
+            return Response({'error': 'Provide table_id or number.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            table = RestaurantTable.objects.get(pk=int(table_id)) if table_id \
+                else RestaurantTable.objects.get(number=str(number))
+        except RestaurantTable.DoesNotExist:
+            return Response({'error': 'Table not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        before = {
+            'number': table.number, 'label': table.label, 'seats': table.seats,
+            'shape': table.shape, 'pos_x': table.pos_x, 'pos_y': table.pos_y,
+            'is_active': table.is_active,
+        }
+        after = {}
+
+        new_number = request.data.get('new_number')
+        if new_number:
+            new_num_str = str(new_number).strip()
+            if new_num_str != table.number and RestaurantTable.objects.filter(number=new_num_str).exists():
+                return Response({'error': f'Table number "{new_num_str}" already in use.'}, status=status.HTTP_400_BAD_REQUEST)
+            table.number = new_num_str
+            after['number'] = new_num_str
+
+        if 'label' in request.data or 'section' in request.data:
+            table.label = str(request.data.get('label', request.data.get('section', ''))).strip()
+            after['label'] = table.label
+
+        if 'seats' in request.data:
+            try:
+                table.seats = max(1, min(50, int(request.data['seats'])))
+                after['seats'] = table.seats
+            except (ValueError, TypeError):
+                pass
+
+        if 'shape' in request.data:
+            sh = str(request.data['shape']).upper()
+            if sh in ('SQUARE', 'ROUND', 'RECT'):
+                table.shape = sh
+                after['shape'] = table.shape
+
+        if 'is_active' in request.data:
+            table.is_active = bool(request.data['is_active'])
+            after['is_active'] = table.is_active
+
+        if 'pos_x' in request.data:
+            table.pos_x = max(0, int(request.data['pos_x']))
+            after['pos_x'] = table.pos_x
+
+        if 'pos_y' in request.data:
+            table.pos_y = max(0, int(request.data['pos_y']))
+            after['pos_y'] = table.pos_y
+
+        table.save()
+        _ai_audit_log('update_table', 'restauranttable', table.id, before, after)
+
+        return Response({
+            'success': True,
+            'message': f'Updated Table {table.number}.',
+            'table': {
+                'id': table.id,
+                'number': table.number,
+                'label': table.label,
+                'seats': table.seats,
+                'shape': table.shape,
+                'status': table.status,
+                'pos_x': table.pos_x,
+                'pos_y': table.pos_y,
+                'is_active': table.is_active,
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class AIDeleteTableView(APIView):
+    """
+    AI WRITE — Delete or deactivate a table.
+    Safety: Prevents deletion if table has an active running order or open bill.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def post(self, request):
+        from apps.tables.models import RestaurantTable
+        from apps.billing.models import OPEN_STATUSES
+
+        table_id = request.data.get('table_id')
+        number = request.data.get('number')
+        deactivate_only = bool(request.data.get('deactivate_only', False))
+
+        if not table_id and not number:
+            return Response({'error': 'Provide table_id or number.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            table = RestaurantTable.objects.get(pk=int(table_id)) if table_id \
+                else RestaurantTable.objects.get(number=str(number))
+        except RestaurantTable.DoesNotExist:
+            return Response({'error': 'Table not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if table.orders.filter(status__in=OPEN_STATUSES).exists():
+            return Response({
+                'error': f'Cannot delete Table {table.number} because it has an active running order or open bill. Please settle or void the order first.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        info = {'id': table.id, 'number': table.number, 'label': table.label}
+
+        if deactivate_only:
+            table.is_active = False
+            table.save(update_fields=['is_active'])
+            _ai_audit_log('deactivate_table', 'restauranttable', table.id, {'is_active': True}, {'is_active': False})
+            return Response({'success': True, 'message': f'Table {table.number} marked inactive.', 'table': info})
+
+        _ai_audit_log('delete_table', 'restauranttable', table.id, info, {'deleted': True})
+        table.delete()
+
+        return Response({'success': True, 'message': f'Table {info["number"]} deleted successfully.', 'deleted_table': info})
+
+
+class AIRearrangeTablesView(APIView):
+    """
+    AI WRITE — Reposition multiple tables on the visual floor layout.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def post(self, request):
+        from apps.tables.models import RestaurantTable
+
+        layout = request.data.get('layout') or request.data.get('tables')
+        if not layout or not isinstance(layout, list):
+            return Response({'error': 'Provide a layout array: [{"number" or "table_id", "pos_x", "pos_y"}]'}, status=status.HTTP_400_BAD_REQUEST)
+
+        updated_count = 0
+        for entry in layout:
+            tid = entry.get('table_id') or entry.get('id')
+            num = entry.get('number')
+            try:
+                t = RestaurantTable.objects.get(pk=int(tid)) if tid else RestaurantTable.objects.get(number=str(num))
+                if 'pos_x' in entry:
+                    t.pos_x = max(0, int(entry['pos_x']))
+                if 'pos_y' in entry:
+                    t.pos_y = max(0, int(entry['pos_y']))
+                t.save(update_fields=['pos_x', 'pos_y'])
+                updated_count += 1
+            except RestaurantTable.DoesNotExist:
+                continue
+
+        _ai_audit_log('rearrange_tables', 'restauranttable', 0, {}, {'count': updated_count})
+        return Response({'success': True, 'message': f'Successfully updated layout for {updated_count} tables.', 'updated_count': updated_count})
+
+
+class AIBulkCreateTablesView(APIView):
+    """
+    AI WRITE — Bulk generate tables on the floor map.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def post(self, request):
+        from apps.tables.models import RestaurantTable
+
+        try:
+            count = max(1, min(100, int(request.data.get('count', 5))))
+            seats = max(1, min(30, int(request.data.get('seats', 4))))
+            start_from = max(1, int(request.data.get('start_from', 1)))
+        except (ValueError, TypeError):
+            return Response({'error': 'count, seats, and start_from must be valid integers.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        label = str(request.data.get('label', request.data.get('section', 'Main Dining'))).strip()
+        shape = str(request.data.get('shape', 'SQUARE')).upper()
+        if shape not in ('SQUARE', 'ROUND', 'RECT'):
+            shape = 'SQUARE'
+
+        taken_numbers = set(RestaurantTable.objects.values_list('number', flat=True))
+        taken_cells = set(RestaurantTable.objects.values_list('pos_x', 'pos_y'))
+
+        cols = 6
+        new_tables = []
+        cursor = len(taken_cells)
+        num = start_from
+
+        while len(new_tables) < count:
+            while str(num) in taken_numbers:
+                num += 1
+            x, y = cursor % cols, cursor // cols
+            while (x, y) in taken_cells:
+                cursor += 1
+                x, y = cursor % cols, cursor // cols
+
+            taken_cells.add((x, y))
+            taken_numbers.add(str(num))
+            new_tables.append(RestaurantTable(
+                number=str(num), seats=seats, label=label, shape=shape, pos_x=x, pos_y=y
+            ))
+            num += 1
+            cursor += 1
+
+        RestaurantTable.objects.bulk_create(new_tables)
+        _ai_audit_log('bulk_create_tables', 'restauranttable', 0, {}, {'count': len(new_tables), 'label': label})
+
+        return Response({
+            'success': True,
+            'message': f'Bulk created {len(new_tables)} tables in section "{label}".',
+            'created_count': len(new_tables),
+        }, status=status.HTTP_201_CREATED)
+
+
+class AITransferTableOrderView(APIView):
+    """
+    AI WRITE — Move an active order from source table to an available target table.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def post(self, request):
+        from apps.tables.models import RestaurantTable, TableStatus
+        from apps.billing.models import OPEN_STATUSES
+
+        src_val = request.data.get('source_table') or request.data.get('from_table')
+        tgt_val = request.data.get('target_table') or request.data.get('to_table')
+
+        if not src_val or not tgt_val:
+            return Response({'error': 'source_table and target_table are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            source = RestaurantTable.objects.get(pk=int(src_val)) if str(src_val).isdigit() \
+                else RestaurantTable.objects.get(number=str(src_val))
+        except RestaurantTable.DoesNotExist:
+            return Response({'error': f'Source table "{src_val}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            target = RestaurantTable.objects.get(pk=int(tgt_val)) if str(tgt_val).isdigit() \
+                else RestaurantTable.objects.get(number=str(tgt_val))
+        except RestaurantTable.DoesNotExist:
+            return Response({'error': f'Target table "{tgt_val}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not target.is_active:
+            return Response({'error': f'Target Table {target.number} is inactive.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if target.status != 'AVAILABLE':
+            return Response({'error': f'Target Table {target.number} is not AVAILABLE (currently {target.status}).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        open_orders = source.orders.filter(status__in=OPEN_STATUSES)
+        if not open_orders.exists():
+            return Response({'error': f'Source Table {source.number} has no active order to transfer.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        open_orders.update(table=target)
+        target.mark(source.status)
+        source.mark(TableStatus.AVAILABLE)
+
+        _ai_audit_log('transfer_table_order', 'restauranttable', source.id,
+                      {'from': source.number, 'status': source.status},
+                      {'to': target.number})
+
+        return Response({
+            'success': True,
+            'message': f'Transferred order from Table {source.number} to Table {target.number}.',
+            'from_table': source.number,
+            'to_table': target.number,
+        }, status=status.HTTP_200_OK)
+

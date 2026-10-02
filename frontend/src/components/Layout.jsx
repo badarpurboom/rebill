@@ -23,6 +23,7 @@ const NAV_META = {
   '/coupons': { label: 'Coupons & Promos', shortcut: null, tag: 'Offers' },
   '/reports': { label: 'Analytics & Reports', shortcut: null, tag: 'Live', isLive: true },
   '/explore': { label: 'Explore Hub', shortcut: '⌘E', tag: 'Hub' },
+  '/table-management': { label: 'Table Management', shortcut: '⌘T', tag: 'Setup' },
   '/settings': { label: 'Settings & Staff', shortcut: '⌘,', tag: 'Admin', isSpin: true },
 }
 
