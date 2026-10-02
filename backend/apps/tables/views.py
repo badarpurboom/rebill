@@ -27,16 +27,19 @@ class TableViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = RestaurantTable.objects.all()
-        include_inactive = (
-            self.request.query_params.get('include_inactive') == 'true'
-            or self.request.query_params.get('all') == 'true'
-        )
-        if not include_inactive:
-            qs = qs.filter(is_active=True)
+        # For table list endpoint, default to active tables unless all/include_inactive is specified.
+        # For retrieve, update, and destroy actions, allow all tables so inactive tables can be reactivated or managed.
+        if self.action == 'list':
+            include_inactive = (
+                self.request.query_params.get('include_inactive') == 'true'
+                or self.request.query_params.get('all') == 'true'
+            )
+            if not include_inactive:
+                qs = qs.filter(is_active=True)
 
-        section = self.request.query_params.get('section')
-        if section:
-            qs = qs.filter(label=section)
+            section = self.request.query_params.get('section')
+            if section:
+                qs = qs.filter(label=section)
 
         open_orders = Order.objects.filter(status__in=OPEN_STATUSES).select_related('customer').prefetch_related('items')
         return qs.prefetch_related(
