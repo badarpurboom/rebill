@@ -958,7 +958,17 @@ class AIAddItemToOrderView(APIView):
 
         order = Order.objects.filter(table=table, status__in=OPEN_STATUSES).order_by('-created_at').first()
         if not order:
-            return Response({'error': f'Table {table.number} has no running order. Create one first with create_table_order.'}, status=status.HTTP_400_BAD_REQUEST)
+            from django.contrib.auth import get_user_model
+            from apps.tables.models import TableStatus
+            User = get_user_model()
+            ai_user = User.objects.filter(is_superuser=True, is_active=True).first() or User.objects.filter(is_active=True).first()
+            order = Order.objects.create(
+                order_type='DINE_IN',
+                table=table,
+                status='RUNNING',
+                created_by=ai_user,
+            )
+            table.mark(TableStatus.OCCUPIED)
 
         if variant_id:
             try:
@@ -1365,5 +1375,327 @@ class AITransferTableOrderView(APIView):
             'message': f'Transferred order from Table {source.number} to Table {target.number}.',
             'from_table': source.number,
             'to_table': target.number,
+        }, status=status.HTTP_200_OK)
+
+
+class AIGetOpenOrdersView(APIView):
+    """
+    AI READ — Retrieve all active open orders (Dine-In and Takeaway).
+    Allows AI/cashier to inspect what orders need to be settled.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def get(self, request):
+        from apps.billing.models import Order, OPEN_STATUSES
+
+        order_type = request.query_params.get('order_type')
+        table_number = request.query_params.get('table_number')
+
+        qs = Order.objects.filter(status__in=OPEN_STATUSES).select_related('table', 'bill', 'created_by').prefetch_related('items')
+
+        if order_type:
+            qs = qs.filter(order_type=order_type.upper())
+        if table_number:
+            qs = qs.filter(table__number=str(table_number))
+
+        qs = qs.order_by('-created_at')
+
+        orders_data = []
+        for o in qs:
+            orders_data.append({
+                'order_id': o.id,
+                'order_type': o.order_type,
+                'status': o.status,
+                'table_number': o.table.number if o.table else None,
+                'table_label': o.table.label if o.table else None,
+                'tag_name': o.tag_name or None,
+                'subtotal': str(o.subtotal),
+                'item_count': o.item_count,
+                'items': [
+                    {
+                        'id': it.id,
+                        'name': it.item_name,
+                        'portion': it.portion,
+                        'quantity': it.quantity,
+                        'unit_price': str(it.unit_price),
+                        'line_total': str(it.line_total),
+                        'note': it.note,
+                    }
+                    for it in o.items.all()
+                ],
+                'bill': {
+                    'bill_id': o.bill.id,
+                    'bill_number': o.bill.bill_number,
+                    'status': o.bill.status,
+                    'net_payable': str(o.bill.net_payable),
+                } if hasattr(o, 'bill') and o.bill else None,
+                'created_at': o.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            })
+
+        return Response({
+            'count': len(orders_data),
+            'orders': orders_data,
+        }, status=status.HTTP_200_OK)
+
+
+class AISettleOrderView(APIView):
+    """
+    AI WRITE — Settle and complete a Dine-In or Takeaway order.
+    Safety:
+    • Resolves open order via table_number, order_id, bill_id, or tag_name.
+    • Computes bill totals if not yet billed, saves bill snapshot.
+    • Marks bill & order as PAID.
+    • Releases table back to AVAILABLE if Dine-In.
+    • Records customer visits and loyalty points.
+    • Triggers WhatsApp bill receipt / feedback link if enabled.
+    • Full audit log written.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def post(self, request):
+        from apps.billing.models import (
+            Order, Bill, OrderStatus, BillStatus, PaymentMode,
+            OPEN_STATUSES,
+        )
+        from apps.tables.models import RestaurantTable, TableStatus
+        from apps.customers.models import Customer, LoyaltyTransaction, LoyaltyReason
+        from apps.settings_app.models import RestaurantSettings
+        from apps.billing.services import compute_totals
+        from django.contrib.auth import get_user_model
+        from django.utils import timezone
+        from django.db import transaction
+        from decimal import Decimal
+
+        table_number = request.data.get('table_number') or request.data.get('table')
+        order_id = request.data.get('order_id')
+        bill_id = request.data.get('bill_id')
+        bill_number = request.data.get('bill_number')
+        tag_name = request.data.get('tag_name') or request.data.get('tag')
+
+        payment_mode_input = str(request.data.get('payment_mode') or 'CASH').strip().upper()
+        valid_modes = [c[0] for c in PaymentMode.choices]
+        payment_mode = payment_mode_input if payment_mode_input in valid_modes else PaymentMode.CASH
+
+        try:
+            discount_percent = Decimal(str(request.data.get('discount_percent', 0)))
+        except Exception:
+            discount_percent = Decimal('0.00')
+
+        try:
+            redeem_points = int(request.data.get('redeem_points', 0))
+        except Exception:
+            redeem_points = 0
+
+        customer_phone = (request.data.get('customer_phone') or '').strip()
+        customer_name = (request.data.get('customer_name') or '').strip()
+
+        order = None
+        bill = None
+
+        if bill_id or bill_number:
+            try:
+                b_qs = Bill.objects.select_related('order', 'order__table', 'customer')
+                bill = b_qs.get(pk=int(bill_id)) if bill_id else b_qs.get(bill_number=str(bill_number).strip())
+                order = bill.order
+            except Bill.DoesNotExist:
+                return Response({'error': f'Bill "{bill_id or bill_number}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        elif order_id:
+            try:
+                order = Order.objects.select_related('table').get(pk=int(order_id))
+                if hasattr(order, 'bill'):
+                    bill = order.bill
+            except Order.DoesNotExist:
+                return Response({'error': f'Order #{order_id} not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        elif table_number:
+            try:
+                table = RestaurantTable.objects.get(number=str(table_number))
+            except RestaurantTable.DoesNotExist:
+                return Response({'error': f'Table "{table_number}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            order = Order.objects.filter(table=table, status__in=OPEN_STATUSES).select_related('table').order_by('-created_at').first()
+            if not order:
+                return Response({
+                    'error': f'Table {table.number} has no active open order to settle (current table status: {table.status}).'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            if hasattr(order, 'bill'):
+                bill = order.bill
+
+        elif tag_name:
+            order = Order.objects.filter(tag_name__iexact=str(tag_name).strip(), status__in=OPEN_STATUSES).select_related('table').order_by('-created_at').first()
+            if not order:
+                return Response({
+                    'error': f'No open order found with tag "{tag_name}".'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            if hasattr(order, 'bill'):
+                bill = order.bill
+
+        else:
+            return Response({
+                'error': 'Provide table_number, order_id, bill_id, or tag_name to identify the order to settle.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if order.status == OrderStatus.PAID:
+            return Response({'error': f'Order #{order.id} is already PAID.'}, status=status.HTTP_400_BAD_REQUEST)
+        if order.status == OrderStatus.CANCELLED:
+            return Response({'error': f'Order #{order.id} is CANCELLED.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not order.items.exists():
+            return Response({
+                'error': f'Order #{order.id} has no items and cannot be settled.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        system_user = User.objects.filter(is_superuser=True, is_active=True).first() or User.objects.filter(is_active=True).first()
+
+        customer = None
+        if customer_phone:
+            customer, _ = Customer.objects.get_or_create(
+                phone=customer_phone,
+                defaults={'name': customer_name or f'Guest {customer_phone[-4:]}'}
+            )
+            if customer_name and not customer.name:
+                customer.name = customer_name
+                customer.save(update_fields=['name'])
+        elif bill and bill.customer:
+            customer = bill.customer
+
+        with transaction.atomic():
+            settings_row = RestaurantSettings.load()
+
+            if not bill:
+                totals = compute_totals(
+                    subtotal=order.subtotal,
+                    discount_percent=discount_percent,
+                    settings=settings_row,
+                    redeem_points=redeem_points
+                )
+                bill = Bill.objects.create(
+                    order=order,
+                    order_type=order.order_type,
+                    customer=customer,
+                    bill_number=RestaurantSettings.take_bill_number(),
+                    subtotal=totals['subtotal'],
+                    discount_percent=totals['discount_percent'],
+                    discount_amount=totals['discount_amount'],
+                    taxable_amount=totals['taxable_amount'],
+                    cgst_percent=totals['cgst_percent'],
+                    cgst_amount=totals['cgst_amount'],
+                    sgst_percent=totals['sgst_percent'],
+                    sgst_amount=totals['sgst_amount'],
+                    total=totals['total'],
+                    points_redeemed=totals['points_redeemed'],
+                    redeem_amount=totals['redeem_amount'],
+                    net_payable=totals['net_payable'],
+                    points_earned=totals['points_earned'] if customer else 0,
+                    created_by=system_user,
+                    restaurant_name=settings_row.restaurant_name,
+                    restaurant_address=settings_row.address,
+                    gstin=settings_row.gstin,
+                )
+                if customer and bill.points_redeemed:
+                    LoyaltyTransaction.post(
+                        customer,
+                        -bill.points_redeemed,
+                        LoyaltyReason.REDEEM,
+                        bill=bill,
+                        note=f'Bill {bill.bill_number}',
+                        user=system_user,
+                    )
+            else:
+                if bill.status == BillStatus.PAID:
+                    return Response({'error': f'Bill #{bill.bill_number} is already PAID.'}, status=status.HTTP_400_BAD_REQUEST)
+                if customer and not bill.customer:
+                    bill.customer = customer
+                    bill.save(update_fields=['customer'])
+
+            bill.payment_mode = payment_mode
+            bill.status = BillStatus.PAID
+            bill.paid_at = timezone.now()
+            bill.save(update_fields=['payment_mode', 'status', 'paid_at'])
+
+            if bill.customer_id:
+                cust = Customer.objects.select_for_update().get(pk=bill.customer_id)
+                cust.record_visit(bill.total)
+                if bill.points_earned:
+                    LoyaltyTransaction.post(
+                        cust,
+                        bill.points_earned,
+                        LoyaltyReason.EARN,
+                        bill=bill,
+                        note=f'Bill {bill.bill_number}',
+                        user=system_user,
+                    )
+
+            order.status = OrderStatus.PAID
+            order.save(update_fields=['status', 'updated_at'])
+
+            table_freed = False
+            table_number_val = None
+            if order.table:
+                order.table.mark(TableStatus.AVAILABLE)
+                table_freed = True
+                table_number_val = order.table.number
+
+            try:
+                if bill.customer:
+                    from apps.whatsapp.models import FeedbackRequest, TriggerType, WhatsAppConfig
+                    from apps.whatsapp.services import send_if_enabled
+
+                    send_if_enabled(
+                        TriggerType.BILL_RECEIPT,
+                        customer=bill.customer,
+                        bill=bill,
+                        context={
+                            'bill_number': bill.bill_number,
+                            'bill_amount': str(bill.net_payable),
+                            'earned_points': bill.points_earned,
+                            'available_points': bill.customer.points_balance,
+                        },
+                    )
+
+                    feedback_req, _ = FeedbackRequest.objects.get_or_create(
+                        customer=bill.customer, bill=bill
+                    )
+                    wa_config = WhatsAppConfig.load()
+                    feedback_link = f"{wa_config.public_base_url.rstrip('/')}/feedback/{feedback_req.token}"
+                    send_if_enabled(
+                        TriggerType.FEEDBACK,
+                        customer=bill.customer,
+                        bill=bill,
+                        context={'link': feedback_link},
+                    )
+            except Exception:
+                pass
+
+        _ai_audit_log('settle_order', 'bill', bill.id,
+                      {'order_id': order.id, 'status': 'OPEN'},
+                      {'status': 'PAID', 'payment_mode': payment_mode, 'net_payable': str(bill.net_payable), 'table_freed': table_freed})
+
+        order_identifier = f"Table {table_number_val}" if table_number_val else f"Takeaway Order #{order.id}" + (f" ({order.tag_name})" if order.tag_name else "")
+
+        return Response({
+            'success': True,
+            'message': f'Successfully settled {order_identifier}! Bill #{bill.bill_number} for ₹{bill.net_payable} marked PAID via {payment_mode}.' + (f' Table {table_number_val} is now AVAILABLE.' if table_freed else ''),
+            'order_id': order.id,
+            'order_type': order.order_type,
+            'bill_id': bill.id,
+            'bill_number': bill.bill_number,
+            'payment_mode': bill.payment_mode,
+            'subtotal': str(bill.subtotal),
+            'discount_amount': str(bill.discount_amount),
+            'taxable_amount': str(bill.taxable_amount),
+            'gst_amount': str(bill.cgst_amount + bill.sgst_amount),
+            'total': str(bill.total),
+            'net_payable': str(bill.net_payable),
+            'table_freed': table_freed,
+            'table_number': table_number_val,
+            'customer': {
+                'id': bill.customer.id,
+                'name': bill.customer.name,
+                'phone': bill.customer.phone,
+                'points_earned': bill.points_earned,
+            } if bill.customer else None,
         }, status=status.HTTP_200_OK)
 
