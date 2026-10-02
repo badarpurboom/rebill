@@ -630,6 +630,72 @@ SAFETY: Source table must have an active order. Target table must be AVAILABLE a
     }
   );
 
+  // 25. get_open_orders ── READ
+  server.tool(
+    'get_open_orders',
+    `Active/open Dine-In aur Takeaway orders ki list dekhne ke liye.
+Returns: running orders, table number, tag name, items list, subtotal, and bill status.
+Use this to check which orders are pending payment or running before settling.`,
+    {
+      order_type: z.enum(['DINE_IN', 'TAKEAWAY', 'DELIVERY']).optional().describe('Filter by order type: DINE_IN or TAKEAWAY'),
+      table_number: z.string().optional().describe('Filter by specific table number (e.g. "9")'),
+    },
+    async ({ order_type, table_number }) => {
+      try {
+        const params = {};
+        if (order_type) params.order_type = order_type;
+        if (table_number) params.table_number = table_number;
+        const response = await api.get(`/orders/open/`, { params });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to fetch open orders: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 26. settle_order ── WRITE (safe)
+  server.tool(
+    'settle_order',
+    `Dine-In ya Takeaway order ko settle/bill close karne ke liye (payment collect karna aur order complete karna).
+Table number (e.g. "9"), order_id, bill_id ya tag_name pass kar sakte ho.
+Agar Dine-In order hai to table automatic AVAILABLE (free) ho jayegi.
+Payment modes: CASH (default), UPI, CARD, DUE, ONLINE, SPLIT.
+Optional: discount_percent, customer_phone, customer_name, redeem_points.`,
+    {
+      table_number: z.string().optional().describe('Dine-In table number to settle (e.g. "9")'),
+      order_id: z.union([z.string(), z.number()]).optional().describe('Specific Order ID to settle'),
+      bill_id: z.union([z.string(), z.number()]).optional().describe('Specific Bill ID to settle'),
+      tag_name: z.string().optional().describe('Tag name / customer identifier for takeaway orders (e.g. "Rahul")'),
+      payment_mode: z.enum(['CASH', 'UPI', 'CARD', 'DUE', 'ONLINE', 'SPLIT']).default('CASH').describe('Payment mode: CASH, UPI, CARD, DUE, ONLINE, SPLIT'),
+      discount_percent: z.number().min(0).max(100).default(0).optional().describe('Discount percentage (0-100) if applicable'),
+      customer_phone: z.string().optional().describe('Customer 10-digit mobile number for loyalty points and WhatsApp receipt'),
+      customer_name: z.string().optional().describe('Customer name'),
+      redeem_points: z.number().min(0).default(0).optional().describe('Loyalty points to redeem'),
+    },
+    async ({ table_number, order_id, bill_id, tag_name, payment_mode, discount_percent, customer_phone, customer_name, redeem_points }) => {
+      try {
+        const payload = {
+          payment_mode: payment_mode || 'CASH',
+        };
+        if (table_number) payload.table_number = table_number;
+        if (order_id) payload.order_id = order_id;
+        if (bill_id) payload.bill_id = bill_id;
+        if (tag_name) payload.tag_name = tag_name;
+        if (discount_percent !== undefined) payload.discount_percent = discount_percent;
+        if (customer_phone) payload.customer_phone = customer_phone;
+        if (customer_name) payload.customer_name = customer_name;
+        if (redeem_points !== undefined) payload.redeem_points = redeem_points;
+
+        const response = await api.post(`/orders/settle/`, payload);
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to settle order: ${errDetail}` }] };
+      }
+    }
+  );
+
   return server;
 }
 

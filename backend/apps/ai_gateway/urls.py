@@ -27,6 +27,8 @@ from .views import (
     AITransferTableOrderView,
     AIAddItemToOrderView,
     AIRemoveItemFromOrderView,
+    AIGetOpenOrdersView,
+    AISettleOrderView,
 )
 
 urlpatterns = [
@@ -57,4 +59,7 @@ urlpatterns = [
     path('tables/transfer/', AITransferTableOrderView.as_view(), name='ai-transfer-table-order'),
     path('tables/add-item/', AIAddItemToOrderView.as_view(), name='ai-add-item-to-order'),
     path('tables/remove-item/', AIRemoveItemFromOrderView.as_view(), name='ai-remove-item-from-order'),
+    # ── Order & Bill Settlement endpoints ──
+    path('orders/open/', AIGetOpenOrdersView.as_view(), name='ai-get-open-orders'),
+    path('orders/settle/', AISettleOrderView.as_view(), name='ai-settle-order'),
 ]
