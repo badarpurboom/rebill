@@ -5,8 +5,8 @@ export const tables = {
   summary: () => api.get('/tables/summary/').then((r) => r.data),
   sections: () => api.get('/tables/sections/').then((r) => r.data),
   create: (payload) => api.post('/tables/', payload).then((r) => r.data),
-  update: (id, payload) => api.patch(`/tables/${id}/`, payload).then((r) => r.data),
-  remove: (id) => api.delete(`/tables/${id}/`),
+  update: (id, payload) => api.patch(`/tables/${id}/?all=true`, payload).then((r) => r.data),
+  remove: (id) => api.delete(`/tables/${id}/?all=true`),
 
   /** Owner drags several tables, then saves the whole layout in one call. */
   saveLayout: (positions) =>
