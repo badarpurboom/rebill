@@ -19,24 +19,36 @@ GRID_COLUMNS = 10
 
 
 class TableViewSet(viewsets.ModelViewSet):
-    """Floor map. Everyone reads it; only the Owner edits the layout."""
+    """Floor map. Everyone reads it; Owner & managers with manage_tables edit."""
 
     serializer_class = TableSerializer
     permission_classes = [IsOwnerOrReadOnly]
     pagination_class = None
 
     def get_queryset(self):
+        qs = RestaurantTable.objects.all()
+        include_inactive = (
+            self.request.query_params.get('include_inactive') == 'true'
+            or self.request.query_params.get('all') == 'true'
+        )
+        if not include_inactive:
+            qs = qs.filter(is_active=True)
+
+        section = self.request.query_params.get('section')
+        if section:
+            qs = qs.filter(label=section)
+
         open_orders = Order.objects.filter(status__in=OPEN_STATUSES).select_related('customer').prefetch_related('items')
-        return RestaurantTable.objects.filter(is_active=True).prefetch_related(
+        return qs.prefetch_related(
             Prefetch('orders', queryset=open_orders, to_attr='_open_orders')
         )
 
     def perform_destroy(self, instance):
         if instance.orders.filter(status__in=OPEN_STATUSES).exists():
-            raise ValidationError('This table has an active order — please generate the bill first.')
+            raise ValidationError('This table has an active order — please settle or void the order first.')
         instance.delete()
 
-    @action(detail=False, methods=['post'], permission_classes=[IsOwner])
+    @action(detail=False, methods=['post'], permission_classes=[IsOwnerOrReadOnly])
     def save_layout(self, request):
         """Persist drag & drop positions for many tables in one shot."""
         serializer = TableLayoutSerializer(data=request.data)
@@ -59,7 +71,7 @@ class TableViewSet(viewsets.ModelViewSet):
         RestaurantTable.objects.bulk_update(by_id.values(), ['pos_x', 'pos_y'])
         return Response({'updated': len(entries)})
 
-    @action(detail=False, methods=['post'], permission_classes=[IsOwner])
+    @action(detail=False, methods=['post'], permission_classes=[IsOwnerOrReadOnly])
     @transaction.atomic
     def bulk_create(self, request):
         """Create N tables at once, auto-laid-out on the grid."""
@@ -68,6 +80,7 @@ class TableViewSet(viewsets.ModelViewSet):
         count = serializer.validated_data['count']
         seats = serializer.validated_data['seats']
         number = serializer.validated_data['start_from']
+        label = serializer.validated_data.get('label', '').strip()
 
         taken_numbers = set(RestaurantTable.objects.values_list('number', flat=True))
         taken_cells = set(RestaurantTable.objects.values_list('pos_x', 'pos_y'))
@@ -85,13 +98,46 @@ class TableViewSet(viewsets.ModelViewSet):
             taken_cells.add((x, y))
             taken_numbers.add(str(number))
             new_tables.append(
-                RestaurantTable(number=str(number), seats=seats, pos_x=x, pos_y=y)
+                RestaurantTable(number=str(number), seats=seats, label=label, pos_x=x, pos_y=y)
             )
             number += 1
             cursor += 1
 
         RestaurantTable.objects.bulk_create(new_tables)
         return Response({'created': len(new_tables)}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], permission_classes=[IsOwnerOrReadOnly])
+    @transaction.atomic
+    def auto_arrange(self, request):
+        """Auto layout all tables in neat rows/columns on the grid."""
+        tables = list(RestaurantTable.objects.all().order_by('label', 'number'))
+        cols = int(request.data.get('columns', 6))
+        cols = max(3, min(12, cols))
+        for idx, t in enumerate(tables):
+            t.pos_x = idx % cols
+            t.pos_y = idx // cols
+        RestaurantTable.objects.bulk_update(tables, ['pos_x', 'pos_y'])
+        return Response({'updated': len(tables), 'columns': cols})
+
+    @action(detail=False, methods=['get'])
+    def sections(self, request):
+        """Get unique table sections with seat and table statistics."""
+        from django.db.models import Count, Sum
+        stats = (
+            RestaurantTable.objects.filter(is_active=True)
+            .values('label')
+            .annotate(total_tables=Count('id'), total_seats=Sum('seats'))
+            .order_by('label')
+        )
+        return Response([
+            {
+                'name': s['label'] or 'General',
+                'raw_label': s['label'],
+                'total_tables': s['total_tables'],
+                'total_seats': s['total_seats'] or 0,
+            }
+            for s in stats
+        ])
 
     @action(detail=False, methods=['get'])
     def summary(self, request):

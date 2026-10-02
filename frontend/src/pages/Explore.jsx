@@ -88,6 +88,17 @@ export default function Explore() {
         </svg>
       ),
     },
+    {
+      id: 'tables-mgmt',
+      title: 'Table Management',
+      path: '/table-management',
+      animateClass: 'card-animate-7',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+        </svg>
+      ),
+    },
   ], [])
 
   const filteredModules = useMemo(() => {
@@ -116,6 +127,7 @@ export default function Explore() {
         .card-animate-4 { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.16s backwards; }
         .card-animate-5 { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.20s backwards; }
         .card-animate-6 { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.24s backwards; }
+        .card-animate-7 { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.28s backwards; }
       `}</style>
 
       {/* Floating Curved Top Header Bar */}
@@ -170,8 +182,8 @@ export default function Explore() {
       {/* Main Content Area: 1 Row with 6 Compact Cards */}
       <main className="flex-1 w-full bg-slate-50 px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
         <div className="flex flex-col w-full">
-          {/* 6 Cards in Single Row on Large Screens */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 xl:gap-4" id="modules-container">
+          {/* 7 Cards across Responsive Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3.5 xl:gap-4" id="modules-container">
             {filteredModules.map((item) => (
               <div
                 key={item.id}

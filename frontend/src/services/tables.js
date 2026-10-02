@@ -1,8 +1,9 @@
 import api from './api'
 
 export const tables = {
-  list: () => api.get('/tables/').then((r) => r.data),
+  list: (params) => api.get('/tables/', { params }).then((r) => r.data),
   summary: () => api.get('/tables/summary/').then((r) => r.data),
+  sections: () => api.get('/tables/sections/').then((r) => r.data),
   create: (payload) => api.post('/tables/', payload).then((r) => r.data),
   update: (id, payload) => api.patch(`/tables/${id}/`, payload).then((r) => r.data),
   remove: (id) => api.delete(`/tables/${id}/`),
@@ -12,6 +13,7 @@ export const tables = {
     api.post('/tables/save_layout/', { tables: positions }).then((r) => r.data),
 
   bulkCreate: (payload) => api.post('/tables/bulk_create/', payload).then((r) => r.data),
+  autoArrange: (columns = 6) => api.post('/tables/auto_arrange/', { columns }).then((r) => r.data),
 
   transfer: (id, target_table_id) => 
     api.post(`/tables/${id}/transfer/`, { target_table_id }).then((r) => r.data),

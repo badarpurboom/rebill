@@ -39,6 +39,7 @@ class IsOwner(BasePermission):
                 or user.is_owner
                 or has_perm(user, 'manage_staff')
                 or has_perm(user, 'manage_roles')
+                or has_perm(user, 'manage_tables')
                 or has_perm(user, 'view_settings')
             )
         )
@@ -59,13 +60,9 @@ class IsOwnerOrCashier(BasePermission):
 
 
 class IsOwnerOrReadOnly(BasePermission):
-    """Any logged-in staff member can read; only the Owner can write.
+    """Any logged-in staff member can read; Owner or staff with manage_tables can write."""
 
-    This is the menu rule: a cashier must see items to bill them, a waiter must
-    see them to read a KOT, but neither may change prices or stock.
-    """
-
-    message = 'Menu badalne ka access sirf Owner ke paas hai.'
+    message = 'Table badalne ka access sirf Owner ya Managers ke paas hai.'
 
     def has_permission(self, request, view):
         user = request.user
@@ -73,4 +70,9 @@ class IsOwnerOrReadOnly(BasePermission):
             return False
         if request.method in SAFE_METHODS:
             return True
-        return user.is_owner
+        return bool(
+            user.is_owner
+            or user.is_superuser
+            or has_perm(user, 'manage_tables')
+        )
+
