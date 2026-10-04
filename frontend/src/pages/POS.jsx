@@ -483,9 +483,17 @@ export default function POS() {
   const initiatePayOrder = async (targetOrder) => {
     try {
       const fullOrder = targetOrder.items ? targetOrder : await orderApi.get(targetOrder.id)
+      const isMandatory = Boolean(settings?.customer_details_mandatory)
+      const hasCustomer = Boolean(fullOrder.customer || fullOrder.customer_detail)
       
+      if (isMandatory && !hasCustomer) {
+        setPendingPayOrder(fullOrder)
+        setQuickCustomerOpen(true)
+        return
+      }
+
       // If customer is ALREADY attached to this order, jump straight to PaymentModal
-      if (fullOrder.customer || fullOrder.customer_detail) {
+      if (hasCustomer) {
         setPayingOrder(fullOrder)
       } else {
         // Open QuickCustomerModal first
@@ -510,6 +518,10 @@ export default function POS() {
   }
 
   const handleQuickCustomerSkip = () => {
+    if (settings?.customer_details_mandatory) {
+      toast.error('Customer details are mandatory before settling the bill.')
+      return
+    }
     if (!pendingPayOrder) return
     const target = pendingPayOrder
     setQuickCustomerOpen(false)
@@ -601,6 +613,7 @@ export default function POS() {
             open={quickCustomerOpen}
             minRedeemPoints={0}
             maxRedeemable={0}
+            mandatory={Boolean(settings?.customer_details_mandatory)}
             onClose={() => {
               setQuickCustomerOpen(false)
               setPendingPayOrder(null)
@@ -751,6 +764,7 @@ export default function POS() {
           open={quickCustomerOpen}
           minRedeemPoints={0}
           maxRedeemable={0}
+          mandatory={Boolean(settings?.customer_details_mandatory)}
           onClose={() => {
             setQuickCustomerOpen(false)
             setPendingPayOrder(null)

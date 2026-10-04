@@ -29,6 +29,8 @@ from .views import (
     AIRemoveItemFromOrderView,
     AIGetOpenOrdersView,
     AISettleOrderView,
+    AIGetSettingsView,
+    AIToggleMandatoryCustomerView,
 )
 
 urlpatterns = [
@@ -62,4 +64,7 @@ urlpatterns = [
     # ── Order & Bill Settlement endpoints ──
     path('orders/open/', AIGetOpenOrdersView.as_view(), name='ai-get-open-orders'),
     path('orders/settle/', AISettleOrderView.as_view(), name='ai-settle-order'),
+    # ── Settings & Policy endpoints ──
+    path('settings/', AIGetSettingsView.as_view(), name='ai-get-settings'),
+    path('settings/mandatory-customer/', AIToggleMandatoryCustomerView.as_view(), name='ai-toggle-mandatory-customer'),
 ]

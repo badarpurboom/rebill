@@ -394,6 +394,10 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                     order.customer = customer
                     order.save(update_fields=['customer', 'updated_at'])
 
+        if settings_row.customer_details_mandatory:
+            if not customer or not (customer.name or '').strip() or not (customer.phone or '').strip():
+                raise ValidationError('Customer details (Name and Phone) are mandatory for billing.')
+
         gross = compute_totals(order.subtotal, discount, settings_row)
         allowed_points = max_redeemable_points(gross['total'], customer, settings_row)
         if requested_points > allowed_points:
@@ -828,6 +832,11 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
         bill = self.get_object()
         if bill.status != BillStatus.UNPAID:
             raise ValidationError(f'This bill is already {bill.get_status_display()}.')
+
+        settings_row = RestaurantSettings.load()
+        if settings_row.customer_details_mandatory:
+            if not bill.customer or not (bill.customer.name or '').strip() or not (bill.customer.phone or '').strip():
+                raise ValidationError('Customer details (Name and Phone) are mandatory to settle this bill.')
 
         serializer = PaySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

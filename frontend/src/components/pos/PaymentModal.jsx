@@ -198,6 +198,17 @@ export default function PaymentModal({ order: initialOrder, onClose, onPaid }) {
     setBusy(true)
     setError('')
     try {
+      if (settings?.customer_details_mandatory) {
+        const hasCust = Boolean(order?.customer || order?.customer_detail)
+        const hasCustName = Boolean(order?.customer_name || order?.customer_detail?.name)
+        const hasCustPhone = Boolean(order?.customer_phone || order?.customer_detail?.phone)
+        if (!hasCust || !hasCustName || !hasCustPhone) {
+          setError('Customer details (Name & Phone) are mandatory to settle this bill.')
+          setBusy(false)
+          return
+        }
+      }
+
       let targetBill = bill || order?.bill
 
       // If no bill in state yet, but order is BILLED, fetch latest order to get bill
