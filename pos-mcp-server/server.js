@@ -696,6 +696,43 @@ Optional: discount_percent, customer_phone, customer_name, redeem_points.`,
     }
   );
 
+  // 27. get_restaurant_settings ── READ
+  server.tool(
+    'get_restaurant_settings',
+    'Restaurant ki current settings dekhne ke liye — jaise customer details mandatory hai ya nahi (customer_details_mandatory), GST tax rates, discount limits, loyalty system status, bill prefix aur address.',
+    {},
+    async () => {
+      try {
+        const response = await api.get(`/settings/`);
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to fetch restaurant settings: ${errDetail}` }] };
+      }
+    }
+  );
+
+  // 28. set_mandatory_customer_details ── WRITE (safe)
+  server.tool(
+    'set_mandatory_customer_details',
+    `Bill settle karte samay customer details (Name & 10-digit Mobile Phone) ko mandatory (compulsory) ya optional set karne ke liye.
+SAFETY & IMPACT:
+• Jab mandatory = true: Cashier ke liye POS aur Tables screens dono pe "Skip" button hide ho jayega, aur bina customer details ke bill settle nahi ho sakega.
+• Jab mandatory = false: Normal/optional flow hoga, jisme "Skip" button dikhega aur anonymous bill allow hoga. Audit logged.`,
+    {
+      mandatory: z.boolean().describe('true = customer details compulsory banayein, false = optional banayein'),
+    },
+    async ({ mandatory }) => {
+      try {
+        const response = await api.post(`/settings/mandatory-customer/`, { mandatory });
+        return { content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }] };
+      } catch (error) {
+        const errDetail = error.response ? JSON.stringify(error.response.data) : error.message;
+        return { isError: true, content: [{ type: 'text', text: `Failed to update mandatory customer setting: ${errDetail}` }] };
+      }
+    }
+  );
+
   return server;
 }
 

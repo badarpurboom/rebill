@@ -69,6 +69,12 @@ class RestaurantSettings(models.Model):
         help_text='Ek bill me zyada se zyada itne % tak points se bhar sakte hain',
     )
 
+    # ── Policy & Validations ─────────────────────────────────────────────
+    customer_details_mandatory = models.BooleanField(
+        default=False,
+        help_text='Dine-in aur Takeaway dono bills me customer name aur phone number capture karna mandatory hai ya nahi',
+    )
+
     # ── AI Integration ───────────────────────────────────────────────────
     ai_connection_token = models.CharField(
         max_length=64, blank=True, null=True, unique=True,

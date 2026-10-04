@@ -4,7 +4,8 @@ import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/context/ToastContext'
 import { errorMessage } from '@/services/api'
 import { tables as tableApi, TABLE_STATUS } from '@/services/tables'
-import { orders as orderApi } from '@/services/billing'
+import { orders as orderApi, restaurantSettings } from '@/services/billing'
+import { getCache, setCache } from '@/services/db'
 import { money } from '@/utils/format'
 import Button from '@/components/ui/Button'
 import { EmptyState, PageLoader } from '@/components/ui/Misc'
@@ -22,6 +23,7 @@ export default function Tables() {
   const toast = useToast()
   const navigate = useNavigate()
 
+  const [settings, setSettings] = useState(null)
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -53,6 +55,19 @@ export default function Tables() {
   }, [toast])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    getCache('restaurant_settings').then((c) => {
+      if (c) setSettings(c)
+    })
+    restaurantSettings
+      .get()
+      .then((data) => {
+        setSettings(data)
+        setCache('restaurant_settings', data)
+      })
+      .catch(() => {})
+  }, [])
 
   /* Auto-refresh */
   useEffect(() => {
@@ -137,7 +152,12 @@ export default function Tables() {
     setLoading(true)
     try {
       const order = await orderApi.get(table.open_order_id)
-      if (!order.customer) {
+      const isMandatory = Boolean(settings?.customer_details_mandatory)
+      const hasCustomer = Boolean(order.customer || order.customer_detail)
+      if (isMandatory && !hasCustomer) {
+        setPendingOrder(order)
+        setQuickCustomerOpen(true)
+      } else if (!hasCustomer) {
         setPendingOrder(order)
         setQuickCustomerOpen(true)
       } else {
@@ -204,6 +224,10 @@ export default function Tables() {
   }
 
   const handleQuickCustomerSkip = () => {
+    if (settings?.customer_details_mandatory) {
+      toast.error('Customer details are mandatory before settling the bill.')
+      return
+    }
     setQuickCustomerOpen(false)
     setPayingOrder(pendingOrder)
   }
@@ -212,7 +236,12 @@ export default function Tables() {
     setLoading(true)
     try {
       const order = await orderApi.get(tk.id)
-      if (!order.customer) {
+      const isMandatory = Boolean(settings?.customer_details_mandatory)
+      const hasCustomer = Boolean(order.customer || order.customer_detail)
+      if (isMandatory && !hasCustomer) {
+        setPendingOrder(order)
+        setQuickCustomerOpen(true)
+      } else if (!hasCustomer) {
         setPendingOrder(order)
         setQuickCustomerOpen(true)
       } else {
@@ -509,6 +538,7 @@ export default function Tables() {
           open={quickCustomerOpen}
           minRedeemPoints={0}
           maxRedeemable={0}
+          mandatory={Boolean(settings?.customer_details_mandatory)}
           onClose={() => {
             setQuickCustomerOpen(false)
             setPendingOrder(null)

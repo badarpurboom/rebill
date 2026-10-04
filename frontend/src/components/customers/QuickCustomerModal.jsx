@@ -15,6 +15,7 @@ export default function QuickCustomerModal({
   maxRedeemable,
   onSaveAndProceed,
   onSkipAndProceed,
+  mandatory = false,
 }) {
   const [phone, setPhone] = useState('')
   const [name, setName] = useState('')
@@ -132,6 +133,7 @@ export default function QuickCustomerModal({
   }
 
   const handleSkip = () => {
+    if (mandatory) return
     onSkipAndProceed()
   }
 
@@ -152,23 +154,39 @@ export default function QuickCustomerModal({
       size="sm"
       onClose={onClose}
       title="📱 Customer Details & Loyalty"
-      subtitle="Enter mobile number to attach customer and apply reward points"
+      subtitle={
+        mandatory
+          ? '🔒 Customer details (Name & Phone) are mandatory to settle this bill'
+          : 'Enter mobile number to attach customer and apply reward points'
+      }
       footer={
         <div className="flex w-full items-center justify-between gap-2">
-          <Button
-            variant="secondary"
-            onClick={handleSkip}
-            disabled={submitting}
-            className="text-slate-600"
-          >
-            ⏭️ Skip (Bill Without Customer)
-          </Button>
+          {!mandatory ? (
+            <Button
+              variant="secondary"
+              onClick={handleSkip}
+              disabled={submitting}
+              className="text-slate-600"
+            >
+              ⏭️ Skip (Bill Without Customer)
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={onClose}
+              disabled={submitting}
+              className="text-slate-600"
+            >
+              Cancel
+            </Button>
+          )}
 
           <Button
             form="quick-customer-form"
             type="submit"
             loading={submitting}
             disabled={!isValidPhone || !name.trim() || searching}
+            className={mandatory ? 'flex-1' : ''}
           >
             ⚡ Save & Generate Bill →
           </Button>
@@ -176,6 +194,12 @@ export default function QuickCustomerModal({
       }
     >
       <form id="quick-customer-form" onSubmit={handleSubmit} className="space-y-4">
+        {mandatory && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50/80 px-3 py-2 flex items-center gap-2 text-xs font-semibold text-rose-800">
+            <span className="text-base">🔒</span>
+            <span>Customer Name & 10-digit Phone are mandatory before bill settlement.</span>
+          </div>
+        )}
         {/* Mobile Number Field */}
         <FormRow label="Mobile Number" required htmlFor="quick-phone" error={error && !isValidPhone ? error : undefined}>
           <div className="relative">

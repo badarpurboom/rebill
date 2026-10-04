@@ -1555,14 +1555,22 @@ class AISettleOrderView(APIView):
                 phone=customer_phone,
                 defaults={'name': customer_name or f'Guest {customer_phone[-4:]}'}
             )
-            if customer_name and not customer.name:
+            if customer_name and customer.name != customer_name:
                 customer.name = customer_name
                 customer.save(update_fields=['name'])
         elif bill and bill.customer:
             customer = bill.customer
+        elif order and order.customer:
+            customer = order.customer
+
+        settings_row = RestaurantSettings.load()
+        if settings_row.customer_details_mandatory:
+            if not customer or not (customer.name or '').strip() or not (customer.phone or '').strip():
+                return Response({
+                    'error': 'Customer details (Name and 10-digit Phone) are mandatory to settle this bill. Please provide customer_name and customer_phone.'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
-            settings_row = RestaurantSettings.load()
 
             if not bill:
                 totals = compute_totals(
@@ -1698,4 +1706,78 @@ class AISettleOrderView(APIView):
                 'points_earned': bill.points_earned,
             } if bill.customer else None,
         }, status=status.HTTP_200_OK)
+
+
+class AIGetSettingsView(APIView):
+    """
+    AI READ — Get restaurant settings including mandatory customer details status.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def get(self, request):
+        from apps.settings_app.models import RestaurantSettings
+
+        settings = RestaurantSettings.load()
+        return Response({
+            'success': True,
+            'restaurant_name': settings.restaurant_name,
+            'address': settings.address,
+            'phone': settings.phone,
+            'gstin': settings.gstin,
+            'customer_details_mandatory': settings.customer_details_mandatory,
+            'cgst_percent': str(settings.cgst_percent),
+            'sgst_percent': str(settings.sgst_percent),
+            'max_discount_percent': str(settings.max_discount_percent),
+            'loyalty_enabled': settings.loyalty_enabled,
+            'bill_prefix': settings.bill_prefix,
+            'next_bill_number': settings.next_bill_number,
+        })
+
+
+class AIToggleMandatoryCustomerView(APIView):
+    """
+    AI WRITE — Enable or disable mandatory customer details for billing.
+    Safety:
+    • Explicit boolean flag (true/false) or toggle.
+    • Audit logged.
+    """
+    authentication_classes = [AITokenAuthentication]
+
+    def post(self, request):
+        from apps.settings_app.models import RestaurantSettings
+
+        settings = RestaurantSettings.load()
+        before_val = settings.customer_details_mandatory
+
+        # Accept boolean 'mandatory' or 'customer_details_mandatory' or 'enabled'
+        val = request.data.get('mandatory')
+        if val is None:
+            val = request.data.get('customer_details_mandatory')
+        if val is None:
+            val = request.data.get('enabled')
+        if val is None:
+            val = not before_val
+        else:
+            if isinstance(val, str):
+                val = val.strip().lower() in ('true', '1', 'yes', 'on')
+            else:
+                val = bool(val)
+
+        settings.customer_details_mandatory = val
+        settings.save(update_fields=['customer_details_mandatory', 'updated_at'])
+
+        _ai_audit_log(
+            'toggle_mandatory_customer_details',
+            'restaurantsettings',
+            settings.pk,
+            {'customer_details_mandatory': before_val},
+            {'customer_details_mandatory': val}
+        )
+
+        status_str = "MANDATORY (Name & 10-digit Phone compulsory, 'Skip' button hidden on POS & Tables)" if val else "OPTIONAL (Default, 'Skip' button allowed)"
+        return Response({
+            'success': True,
+            'message': f'Customer details setting updated: {status_str}',
+            'customer_details_mandatory': settings.customer_details_mandatory,
+        })
 

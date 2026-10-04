@@ -16,6 +16,7 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer):
             'bill_prefix', 'bill_number_padding', 'next_bill_number', 'next_bill_preview',
             'cgst_percent', 'sgst_percent', 'gst_percent',
             'max_discount_percent',
+            'customer_details_mandatory',
             'loyalty_enabled', 'loyalty_earn_amount', 'loyalty_earn_points',
             'loyalty_redeem_value', 'loyalty_min_redeem_points', 'loyalty_max_redeem_percent',
             'updated_at',

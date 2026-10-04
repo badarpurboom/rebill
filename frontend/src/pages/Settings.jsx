@@ -54,6 +54,7 @@ export default function Settings() {
         cgst_percent: values.cgst_percent,
         sgst_percent: values.sgst_percent,
         max_discount_percent: values.max_discount_percent,
+        customer_details_mandatory: Boolean(values.customer_details_mandatory),
         loyalty_enabled: Boolean(values.loyalty_enabled),
         loyalty_earn_amount: values.loyalty_earn_amount,
         loyalty_earn_points: Number(values.loyalty_earn_points),
@@ -251,6 +252,52 @@ export default function Settings() {
             <p className="mt-1 text-[11px] font-bold text-slate-400">
               Discounts above this percentage prompt for Owner password authorization.
             </p>
+          </div>
+        </div>
+
+        {/* Customer Details Policy Card */}
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-extrabold tracking-wider text-slate-400 uppercase">Customer Details Policy</h2>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Billing aur settlement ke samay customer details capture karne ka rule
+              </p>
+            </div>
+            <label className="flex items-center gap-2.5 text-xs font-bold text-slate-800 cursor-pointer select-none bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl hover:bg-slate-100 transition">
+              <input
+                type="checkbox"
+                className="accent-rose-600 size-4 rounded cursor-pointer"
+                {...register('customer_details_mandatory')}
+              />
+              <span>Mandatory Customer Details</span>
+            </label>
+          </div>
+
+          <div
+            className={`p-4 rounded-2xl border transition-all ${
+              watch('customer_details_mandatory')
+                ? 'bg-rose-50/70 border-rose-200'
+                : 'bg-slate-50 border-slate-200/80'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">
+                {watch('customer_details_mandatory') ? '🔒' : '🔓'}
+              </span>
+              <div>
+                <p className="text-xs font-bold text-slate-800">
+                  {watch('customer_details_mandatory')
+                    ? 'Mandatory Active (Dine-In & Takeaway)'
+                    : 'Optional Customer Details (Default)'}
+                </p>
+                <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+                  {watch('customer_details_mandatory')
+                    ? 'Jab ye switch ON hai, cashier ko Dine-in aur Takeaway dono me customer details (Name & 10-digit Phone) bharna compulsory hoga. "Skip Customer Details" button hide ho jayega aur bina customer ke bill settle nahi hoga.'
+                    : 'Jab ye switch OFF hai, cashier bina customer details dale direct "Skip" karke anonymous bill settle kar sakta hai.'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
